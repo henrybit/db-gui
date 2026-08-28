@@ -1,0 +1,22 @@
+[[permission]]
+identifier = "mysql"
+description = "Allows the frontend to manage MySQL and PostgreSQL connections, inspect schema objects, and run SQL"
+commands.allow = [
+  "list_connections",
+  "upsert_connection",
+  "delete_connection",
+  "test_connection",
+  "connect_session",
+  "disconnect_session",
+  "list_databases",
+  "list_tables",
+  "list_views",
+  "list_indexes",
+  "list_triggers",
+  "list_routines",
+  "get_columns",
+  "get_ddl",
+  "preview_table",
+  "table_row_count",
+  "execute_sql"
+]

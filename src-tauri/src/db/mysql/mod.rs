@@ -1,0 +1,492 @@
+mod values;
+
+use super::engine::DatabaseEngine;
+use super::ident::{qualify, quote_ident, validate_ident};
+use crate::error::{AppError, AppResult};
+use crate::models::{
+    ColumnInfo, ConnectionProfile, DatabaseInfo, IndexInfo, ObjectKind, QueryResult, RoutineInfo,
+    TableInfo, TestConnectionRequest, TriggerInfo, ViewInfo,
+};
+use async_trait::async_trait;
+use mysql_async::prelude::*;
+use mysql_async::{Conn, OptsBuilder, Pool, PoolConstraints, PoolOpts, Row};
+use std::collections::BTreeMap;
+use std::time::Instant;
+use values::{row_to_strings, statement_kind, value_to_display};
+
+const SYSTEM_SCHEMAS: [&str; 4] = ["information_schema", "mysql", "performance_schema", "sys"];
+const MAX_RESULT_ROWS: usize = 5_000;
+
+#[derive(Clone)]
+pub struct MySqlEngine {
+    pool: Pool,
+}
+
+impl MySqlEngine {
+    pub fn from_profile(profile: &ConnectionProfile) -> Self {
+        Self {
+            pool: Pool::new(opts_from_profile(profile)),
+        }
+    }
+
+    pub async fn test(request: &TestConnectionRequest) -> AppResult<()> {
+        let pool = Pool::new(opts_from_request(request));
+        let mut conn = pool.get_conn().await?;
+        conn.ping().await?;
+        drop(conn);
+        pool.disconnect().await?;
+        Ok(())
+    }
+
+    async fn conn(&self) -> AppResult<Conn> {
+        Ok(self.pool.get_conn().await?)
+    }
+}
+
+#[async_trait]
+impl DatabaseEngine for MySqlEngine {
+    async fn ping(&self) -> AppResult<()> {
+        let mut conn = self.conn().await?;
+        conn.ping().await?;
+        Ok(())
+    }
+
+    async fn list_databases(&self) -> AppResult<Vec<DatabaseInfo>> {
+        let mut conn = self.conn().await?;
+        let rows: Vec<(String, Option<String>, Option<String>)> = conn
+            .query(
+                "SELECT SCHEMA_NAME, DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME
+                 FROM information_schema.SCHEMATA
+                 ORDER BY SCHEMA_NAME",
+            )
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(name, charset, collation)| DatabaseInfo {
+                is_system: SYSTEM_SCHEMAS.contains(&name.as_str()),
+                name,
+                charset,
+                collation,
+            })
+            .collect())
+    }
+
+    async fn list_tables(&self, schema: &str) -> AppResult<Vec<TableInfo>> {
+        validate_ident(schema)?;
+        let mut conn = self.conn().await?;
+        let rows: Vec<(
+            String,
+            Option<String>,
+            Option<u64>,
+            Option<u64>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )> = conn
+            .exec(
+                "SELECT TABLE_NAME,
+                        ENGINE,
+                        TABLE_ROWS,
+                        DATA_LENGTH,
+                        TABLE_COMMENT,
+                        DATE_FORMAT(CREATE_TIME, '%Y-%m-%d %H:%i:%s'),
+                        DATE_FORMAT(UPDATE_TIME, '%Y-%m-%d %H:%i:%s')
+                 FROM information_schema.TABLES
+                 WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'
+                 ORDER BY TABLE_NAME",
+                (schema,),
+            )
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(
+                |(name, engine, table_rows, data_length, comment, created_at, updated_at)| {
+                    TableInfo {
+                        name,
+                        engine,
+                        table_rows,
+                        data_length,
+                        comment: comment.unwrap_or_default(),
+                        created_at,
+                        updated_at,
+                    }
+                },
+            )
+            .collect())
+    }
+
+    async fn list_views(&self, schema: &str) -> AppResult<Vec<ViewInfo>> {
+        validate_ident(schema)?;
+        let mut conn = self.conn().await?;
+        let rows: Vec<(
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )> = conn
+            .exec(
+                "SELECT TABLE_NAME, IS_UPDATABLE, CHECK_OPTION, SECURITY_TYPE, DEFINER
+                 FROM information_schema.VIEWS
+                 WHERE TABLE_SCHEMA = ?
+                 ORDER BY TABLE_NAME",
+                (schema,),
+            )
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(name, updatable, check_option, security_type, definer)| ViewInfo {
+                name,
+                updatable: updatable.as_deref() == Some("YES"),
+                check_option,
+                security_type,
+                definer,
+            })
+            .collect())
+    }
+
+    async fn list_indexes(&self, schema: &str) -> AppResult<Vec<IndexInfo>> {
+        validate_ident(schema)?;
+        let mut conn = self.conn().await?;
+        let rows: Vec<(
+            String,
+            String,
+            i8,
+            Option<String>,
+            String,
+            Option<String>,
+        )> = conn
+            .exec(
+                "SELECT INDEX_NAME, TABLE_NAME, NON_UNIQUE, INDEX_TYPE, COLUMN_NAME, INDEX_COMMENT
+                 FROM information_schema.STATISTICS
+                 WHERE TABLE_SCHEMA = ?
+                 ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX",
+                (schema,),
+            )
+            .await?;
+
+        let mut grouped: BTreeMap<(String, String), IndexInfo> = BTreeMap::new();
+        for (name, table_name, non_unique, index_type, column, comment) in rows {
+            let key = (table_name.clone(), name.clone());
+            let entry = grouped.entry(key).or_insert_with(|| IndexInfo {
+                primary: name == "PRIMARY",
+                unique: non_unique == 0,
+                index_type: index_type.unwrap_or_else(|| "BTREE".into()),
+                comment: comment.unwrap_or_default(),
+                columns: Vec::new(),
+                table_name,
+                name,
+            });
+            entry.columns.push(column);
+        }
+        Ok(grouped.into_values().collect())
+    }
+
+    async fn list_triggers(&self, schema: &str) -> AppResult<Vec<TriggerInfo>> {
+        validate_ident(schema)?;
+        let mut conn = self.conn().await?;
+        let rows: Vec<(String, String, String, String, Option<String>)> = conn
+            .exec(
+                "SELECT TRIGGER_NAME, EVENT_OBJECT_TABLE, EVENT_MANIPULATION, ACTION_TIMING, DEFINER
+                 FROM information_schema.TRIGGERS
+                 WHERE TRIGGER_SCHEMA = ?
+                 ORDER BY TRIGGER_NAME",
+                (schema,),
+            )
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(name, table_name, event, timing, definer)| TriggerInfo {
+                name,
+                table_name,
+                event,
+                timing,
+                definer,
+            })
+            .collect())
+    }
+
+    async fn list_routines(&self, schema: &str) -> AppResult<Vec<RoutineInfo>> {
+        validate_ident(schema)?;
+        let mut conn = self.conn().await?;
+        let rows: Vec<(
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )> = conn
+            .exec(
+                "SELECT ROUTINE_NAME,
+                        ROUTINE_TYPE,
+                        DTD_IDENTIFIER,
+                        IS_DETERMINISTIC,
+                        SQL_DATA_ACCESS,
+                        SECURITY_TYPE,
+                        DEFINER,
+                        DATE_FORMAT(CREATED, '%Y-%m-%d %H:%i:%s')
+                 FROM information_schema.ROUTINES
+                 WHERE ROUTINE_SCHEMA = ?
+                 ORDER BY ROUTINE_TYPE, ROUTINE_NAME",
+                (schema,),
+            )
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(
+                |(
+                    name,
+                    routine_type,
+                    returns,
+                    deterministic,
+                    data_access,
+                    security_type,
+                    definer,
+                    created_at,
+                )| RoutineInfo {
+                    name,
+                    routine_type,
+                    returns,
+                    deterministic: deterministic.as_deref() == Some("YES"),
+                    data_access,
+                    security_type,
+                    definer,
+                    created_at,
+                },
+            )
+            .collect())
+    }
+
+    async fn get_columns(&self, schema: &str, table: &str) -> AppResult<Vec<ColumnInfo>> {
+        validate_ident(schema)?;
+        validate_ident(table)?;
+        let mut conn = self.conn().await?;
+        let rows: Vec<(
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            u32,
+        )> = conn
+            .exec(
+                "SELECT COLUMN_NAME,
+                        DATA_TYPE,
+                        COLUMN_TYPE,
+                        IS_NULLABLE,
+                        COLUMN_KEY,
+                        COLUMN_DEFAULT,
+                        EXTRA,
+                        COLUMN_COMMENT,
+                        ORDINAL_POSITION
+                 FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+                 ORDER BY ORDINAL_POSITION",
+                (schema, table),
+            )
+            .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(
+                |(
+                    name,
+                    data_type,
+                    column_type,
+                    nullable,
+                    key,
+                    default_value,
+                    extra,
+                    comment,
+                    ordinal,
+                )| ColumnInfo {
+                    name,
+                    data_type,
+                    column_type,
+                    nullable: nullable == "YES",
+                    key: key.unwrap_or_default(),
+                    default_value,
+                    extra: extra.unwrap_or_default(),
+                    comment: comment.unwrap_or_default(),
+                    ordinal,
+                },
+            )
+            .collect())
+    }
+
+    async fn get_ddl(&self, schema: &str, kind: ObjectKind, name: &str) -> AppResult<String> {
+        validate_ident(schema)?;
+        validate_ident(name)?;
+        let mut conn = self.conn().await?;
+        let sql = match kind {
+            ObjectKind::Table | ObjectKind::View => {
+                format!("SHOW CREATE TABLE {}", qualify(schema, name))
+            }
+            ObjectKind::Function => format!("SHOW CREATE FUNCTION {}", qualify(schema, name)),
+            ObjectKind::Procedure => format!("SHOW CREATE PROCEDURE {}", qualify(schema, name)),
+            ObjectKind::Trigger => format!("SHOW CREATE TRIGGER {}", qualify(schema, name)),
+            ObjectKind::Index => {
+                return Err(AppError::msg(
+                    "indexes do not have standalone CREATE statements; inspect the parent table DDL",
+                ));
+            }
+        };
+
+        let row: Option<Row> = conn.query_first(sql).await?;
+        let row = row.ok_or_else(|| AppError::msg("object DDL was empty"))?;
+        extract_ddl(&row)
+    }
+
+    async fn preview_table(
+        &self,
+        schema: &str,
+        table: &str,
+        limit: u32,
+        offset: u64,
+    ) -> AppResult<QueryResult> {
+        validate_ident(schema)?;
+        validate_ident(table)?;
+        let limit = limit.clamp(1, 1_000);
+        let sql = format!(
+            "SELECT * FROM {} LIMIT {limit} OFFSET {offset}",
+            qualify(schema, table)
+        );
+        self.execute_sql(Some(schema), &sql).await
+    }
+
+    async fn table_row_count(&self, schema: &str, table: &str) -> AppResult<u64> {
+        validate_ident(schema)?;
+        validate_ident(table)?;
+        let mut conn = self.conn().await?;
+        let sql = format!("SELECT COUNT(*) FROM {}", qualify(schema, table));
+        let count: Option<u64> = conn.query_first(sql).await?;
+        Ok(count.unwrap_or(0))
+    }
+
+    async fn execute_sql(&self, schema: Option<&str>, sql: &str) -> AppResult<QueryResult> {
+        let sql = sql.trim();
+        if sql.is_empty() {
+            return Err(AppError::msg("SQL is empty"));
+        }
+
+        let mut conn = self.conn().await?;
+        if let Some(schema) = schema {
+            validate_ident(schema)?;
+            conn.query_drop(format!("USE {}", quote_ident(schema)))
+                .await?;
+        }
+
+        let started = Instant::now();
+        let mut result = conn.query_iter(sql).await?;
+        let columns = result
+            .columns_ref()
+            .iter()
+            .map(|column| crate::models::ColumnMeta {
+                name: column.name_str().into_owned(),
+                type_name: format!("{:?}", column.column_type()),
+            })
+            .collect();
+
+        let mut rows = Vec::new();
+        let mut truncated = false;
+        while let Some(row) = result.next().await? {
+            if rows.len() >= MAX_RESULT_ROWS {
+                truncated = true;
+                break;
+            }
+            rows.push(row_to_strings(&row));
+        }
+
+        let affected_rows = result.affected_rows();
+        let last_insert_id = result.last_insert_id();
+        let duration_ms = started.elapsed().as_millis() as u64;
+
+        Ok(QueryResult {
+            columns,
+            rows,
+            affected_rows,
+            last_insert_id,
+            duration_ms,
+            truncated,
+            statement_kind: statement_kind(sql).to_string(),
+        })
+    }
+
+    async fn close(self) -> AppResult<()> {
+        self.pool.disconnect().await?;
+        Ok(())
+    }
+}
+
+fn opts_from_profile(profile: &ConnectionProfile) -> OptsBuilder {
+    build_opts(
+        &profile.host,
+        profile.port,
+        &profile.username,
+        profile.password.as_deref(),
+        profile.database.as_deref(),
+    )
+}
+
+fn opts_from_request(request: &TestConnectionRequest) -> OptsBuilder {
+    build_opts(
+        &request.host,
+        request.port,
+        &request.username,
+        request.password.as_deref(),
+        request.database.as_deref(),
+    )
+}
+
+fn build_opts(
+    host: &str,
+    port: u16,
+    username: &str,
+    password: Option<&str>,
+    database: Option<&str>,
+) -> OptsBuilder {
+        let constraints = PoolConstraints::new(0, 16).expect("valid pool constraints");
+    let mut opts = OptsBuilder::default()
+        .ip_or_hostname(host)
+        .tcp_port(port)
+        .user(Some(username))
+        .pass(password)
+        .pool_opts(PoolOpts::new().with_constraints(constraints))
+        .prefer_socket(false)
+        .stmt_cache_size(16);
+
+    if let Some(database) = database.filter(|value| !value.is_empty()) {
+        opts = opts.db_name(Some(database));
+    }
+    opts
+}
+
+fn extract_ddl(row: &Row) -> AppResult<String> {
+    for index in 0..row.len() {
+        if let Some(value) = row.as_ref(index) {
+            if let Some(text) = value_to_display(value) {
+                let upper = text.trim_start().to_ascii_uppercase();
+                if upper.starts_with("CREATE ") || upper.starts_with("ALTER ") {
+                    return Ok(text);
+                }
+            }
+        }
+    }
+    if row.len() >= 2 {
+        if let Some(value) = row.as_ref(1).and_then(value_to_display) {
+            return Ok(value);
+        }
+    }
+    Err(AppError::msg("unable to read CREATE statement"))
+}

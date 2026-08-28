@@ -1,0 +1,27 @@
+pub mod connection;
+pub mod query;
+pub mod schema;
+
+pub use connection::*;
+pub use query::*;
+pub use schema::*;
+
+use crate::db::LiveEngine;
+use crate::error::AppResult;
+use crate::runtime::run_db;
+use crate::state::AppState;
+use std::future::Future;
+
+pub async fn with_engine<T, F, Fut>(
+    state: &AppState,
+    connection_id: String,
+    work: F,
+) -> AppResult<T>
+where
+    F: FnOnce(LiveEngine) -> Fut + Send + 'static,
+    Fut: Future<Output = AppResult<T>> + Send + 'static,
+    T: Send + 'static,
+{
+    let engine = state.engine(&connection_id)?;
+    run_db(work(engine)).await
+}

@@ -1,0 +1,16 @@
+<script lang="ts">
+	import './layout.css';
+	import favicon from '$lib/assets/favicon.svg';
+	import AppShell from '$lib/components/layout/AppShell.svelte';
+
+	let { children } = $props();
+</script>
+
+<svelte:head>
+	<title>DB GUI</title>
+	<link rel="icon" href={favicon} />
+</svelte:head>
+
+<AppShell>
+	{@render children()}
+</AppShell>
