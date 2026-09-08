@@ -1,11 +1,12 @@
 mod values;
 
 use super::engine::DatabaseEngine;
-use super::ident::{qualify, quote_ident, validate_ident};
+use super::ident::{create_mysql_database_sql, qualify, quote_ident, validate_ident};
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    ColumnInfo, ConnectionProfile, DatabaseInfo, IndexInfo, ObjectKind, QueryResult, RoutineInfo,
-    TableInfo, TestConnectionRequest, TriggerInfo, ViewInfo,
+    CharsetCatalog, CharsetInfo, CollationInfo, ColumnInfo, ConnectionProfile, DatabaseInfo,
+    IndexInfo, ObjectKind, QueryResult, RoutineInfo, TableInfo, TestConnectionRequest, TriggerInfo,
+    ViewInfo,
 };
 use async_trait::async_trait;
 use mysql_async::prelude::*;
@@ -70,6 +71,55 @@ impl DatabaseEngine for MySqlEngine {
                 collation,
             })
             .collect())
+    }
+
+    async fn create_database(
+        &self,
+        name: &str,
+        charset: Option<&str>,
+        collation: Option<&str>,
+    ) -> AppResult<()> {
+        let sql = create_mysql_database_sql(name, charset, collation)?;
+        let mut conn = self.conn().await?;
+        conn.query_drop(sql).await?;
+        Ok(())
+    }
+
+    async fn list_charset_catalog(&self) -> AppResult<CharsetCatalog> {
+        let mut conn = self.conn().await?;
+        let charset_rows: Vec<(String, Option<String>, Option<String>)> = conn
+            .query(
+                "SELECT CHARACTER_SET_NAME, DEFAULT_COLLATE_NAME, DESCRIPTION
+                 FROM information_schema.CHARACTER_SETS
+                 ORDER BY CHARACTER_SET_NAME",
+            )
+            .await?;
+        let collation_rows: Vec<(String, String, String)> = conn
+            .query(
+                "SELECT COLLATION_NAME, CHARACTER_SET_NAME, IS_DEFAULT
+                 FROM information_schema.COLLATIONS
+                 ORDER BY CHARACTER_SET_NAME, COLLATION_NAME",
+            )
+            .await?;
+
+        Ok(CharsetCatalog {
+            charsets: charset_rows
+                .into_iter()
+                .map(|(name, default_collation, description)| CharsetInfo {
+                    name,
+                    default_collation,
+                    description,
+                })
+                .collect(),
+            collations: collation_rows
+                .into_iter()
+                .map(|(name, charset, is_default)| CollationInfo {
+                    name,
+                    charset,
+                    is_default: is_default.eq_ignore_ascii_case("yes"),
+                })
+                .collect(),
+        })
     }
 
     async fn list_tables(&self, schema: &str) -> AppResult<Vec<TableInfo>> {
@@ -138,27 +188,22 @@ impl DatabaseEngine for MySqlEngine {
 
         Ok(rows
             .into_iter()
-            .map(|(name, updatable, check_option, security_type, definer)| ViewInfo {
-                name,
-                updatable: updatable.as_deref() == Some("YES"),
-                check_option,
-                security_type,
-                definer,
-            })
+            .map(
+                |(name, updatable, check_option, security_type, definer)| ViewInfo {
+                    name,
+                    updatable: updatable.as_deref() == Some("YES"),
+                    check_option,
+                    security_type,
+                    definer,
+                },
+            )
             .collect())
     }
 
     async fn list_indexes(&self, schema: &str) -> AppResult<Vec<IndexInfo>> {
         validate_ident(schema)?;
         let mut conn = self.conn().await?;
-        let rows: Vec<(
-            String,
-            String,
-            i8,
-            Option<String>,
-            String,
-            Option<String>,
-        )> = conn
+        let rows: Vec<(String, String, i8, Option<String>, String, Option<String>)> = conn
             .exec(
                 "SELECT INDEX_NAME, TABLE_NAME, NON_UNIQUE, INDEX_TYPE, COLUMN_NAME, INDEX_COMMENT
                  FROM information_schema.STATISTICS
@@ -456,7 +501,7 @@ fn build_opts(
     password: Option<&str>,
     database: Option<&str>,
 ) -> OptsBuilder {
-        let constraints = PoolConstraints::new(0, 16).expect("valid pool constraints");
+    let constraints = PoolConstraints::new(0, 16).expect("valid pool constraints");
     let mut opts = OptsBuilder::default()
         .ip_or_hostname(host)
         .tcp_port(port)

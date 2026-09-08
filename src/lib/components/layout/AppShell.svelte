@@ -9,6 +9,7 @@
 	import ConnectionDialog from '$lib/components/dialogs/ConnectionDialog.svelte';
 	import ConfirmDialog from '$lib/components/dialogs/ConfirmDialog.svelte';
 	import PasswordDialog from '$lib/components/dialogs/PasswordDialog.svelte';
+	import CreateDatabaseDialog from '$lib/components/dialogs/CreateDatabaseDialog.svelte';
 	import ContextMenu from '$lib/components/layout/ContextMenu.svelte';
 
 	let { children } = $props();
@@ -57,6 +58,9 @@
 {/if}
 {#if workspace.passwordPrompt}
 	<PasswordDialog />
+{/if}
+{#if workspace.createDatabasePrompt}
+	<CreateDatabaseDialog />
 {/if}
 {#if workspace.contextMenu}
 	<ContextMenu />

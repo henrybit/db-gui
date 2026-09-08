@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Cable, Database, Play, Plus, RefreshCw, Square } from '@lucide/svelte';
-	import { engineLabel } from '$lib/engine';
+	import { engineLabel, schemaNoun } from '$lib/engine';
 	import { workspace } from '$lib/stores/workspace.svelte';
 
 	const selected = $derived(workspace.selection);
@@ -30,6 +30,14 @@
 	>
 		<Square size={14} />
 		Disconnect
+	</button>
+	<button
+		class="toolbar-btn"
+		disabled={!active?.connected}
+		onclick={() => active && workspace.askCreateDatabase(active.id)}
+	>
+		<Database size={14} />
+		Create {active ? schemaNoun(active.engine) : 'Database'}
 	</button>
 	<button
 		class="toolbar-btn"

@@ -19,6 +19,10 @@ export function isPostgres(value: string | undefined | null): boolean {
 	return normalizeEngine(value) === 'postgres';
 }
 
+export function schemaNoun(value: string | undefined | null): 'Schema' | 'Database' {
+	return isPostgres(value) ? 'Schema' : 'Database';
+}
+
 export function quoteIdent(engine: string | undefined | null, name: string): string {
 	if (isPostgres(engine)) return `"${name.replaceAll('"', '""')}"`;
 	return `\`${name.replaceAll('`', '``')}\``;

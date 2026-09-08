@@ -2,7 +2,8 @@ use super::with_engine;
 use crate::db::DatabaseEngine;
 use crate::error::AppResult;
 use crate::models::{
-    ColumnInfo, DatabaseInfo, IndexInfo, ObjectKind, RoutineInfo, TableInfo, TriggerInfo, ViewInfo,
+    CharsetCatalog, ColumnInfo, DatabaseInfo, IndexInfo, ObjectKind, RoutineInfo, TableInfo,
+    TriggerInfo, ViewInfo,
 };
 use crate::state::AppState;
 use tauri::State;
@@ -14,6 +15,33 @@ pub async fn list_databases(
 ) -> AppResult<Vec<DatabaseInfo>> {
     with_engine(&state, connection_id, |engine| async move {
         engine.list_databases().await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn create_database(
+    state: State<'_, AppState>,
+    connection_id: String,
+    name: String,
+    charset: Option<String>,
+    collation: Option<String>,
+) -> AppResult<()> {
+    with_engine(&state, connection_id, move |engine| async move {
+        engine
+            .create_database(&name, charset.as_deref(), collation.as_deref())
+            .await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn list_charset_catalog(
+    state: State<'_, AppState>,
+    connection_id: String,
+) -> AppResult<CharsetCatalog> {
+    with_engine(&state, connection_id, |engine| async move {
+        engine.list_charset_catalog().await
     })
     .await
 }

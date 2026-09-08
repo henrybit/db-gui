@@ -137,6 +137,16 @@ button {
 .split-handle {
 	cursor: col-resize;
 	background: transparent;
+	touch-action: none;
+}
+
+.split-handle.horizontal {
+	flex: none;
+	height: 6px;
+	cursor: row-resize;
+	background: var(--bg-muted);
+	border-top: 1px solid var(--border);
+	border-bottom: 1px solid var(--border);
 }
 
 .split-handle:hover,
@@ -347,10 +357,15 @@ button {
 
 .modal {
 	width: min(560px, calc(100vw - 32px));
+	margin: 0;
 	border: 1px solid var(--border);
 	border-radius: 10px;
 	background: white;
 	box-shadow: var(--shadow);
+}
+
+.modal form {
+	margin: 0;
 }
 
 .modal header,
@@ -381,11 +396,17 @@ button {
 	padding: 16px;
 }
 
+.modal .body p {
+	margin: 0;
+	color: var(--text-muted);
+}
+
 .field {
 	display: grid;
 	grid-template-columns: 110px 1fr;
 	align-items: center;
 	gap: 10px;
+	overflow: visible;
 }
 
 .field input,
@@ -404,6 +425,70 @@ button {
 .sql-editor:focus {
 	border-color: #60a5fa;
 	box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.combobox {
+	position: relative;
+	width: 100%;
+}
+
+.combobox input {
+	padding-right: 28px;
+}
+
+.combobox-caret {
+	position: absolute;
+	top: 50%;
+	right: 8px;
+	display: grid;
+	place-items: center;
+	color: var(--text-muted);
+	pointer-events: none;
+	transform: translateY(-50%);
+}
+
+.combobox.open .combobox-caret {
+	color: var(--accent);
+}
+
+.combobox-list {
+	position: absolute;
+	top: calc(100% + 4px);
+	right: 0;
+	left: 0;
+	z-index: 6;
+	max-height: 220px;
+	overflow: auto;
+	padding: 4px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: white;
+	box-shadow: var(--shadow);
+}
+
+.combobox-option {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 8px;
+	height: 28px;
+	padding: 0 8px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	text-align: left;
+}
+
+.combobox-option.active,
+.combobox-option:hover {
+	background: var(--bg-hover);
+}
+
+.combobox-hint {
+	margin-left: auto;
+	flex: none;
+	color: var(--text-muted);
+	font-size: 11px;
 }
 
 .btn {
@@ -472,6 +557,62 @@ button {
 	flex-direction: column;
 	min-height: 0;
 	height: 100%;
+}
+
+.stack-split {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.stack-split.dragging,
+.stack-split.dragging * {
+	cursor: row-resize !important;
+	user-select: none !important;
+}
+
+.stack-split-top {
+	display: flex;
+	flex: 0 0 var(--split-size, 42%);
+	min-height: 72px;
+	min-width: 0;
+	overflow: hidden;
+}
+
+.stack-split-bottom {
+	display: flex;
+	flex: 1 1 0;
+	min-height: 72px;
+	min-width: 0;
+	flex-direction: column;
+	overflow: hidden;
+	background: white;
+}
+
+.stack-split-top .sql-editor {
+	flex: 1;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	border: none;
+	border-radius: 0;
+	resize: none;
+}
+
+.stack-split-top .sql-editor:focus {
+	box-shadow: none;
+}
+
+.stack-split-bottom .data-grid-wrap,
+.stack-split-bottom .empty {
+	flex: 1;
+	min-height: 0;
+}
+
+.stack-split-bottom .message {
+	flex: none;
+	border-top: none;
 }
 
 .filter-bar {

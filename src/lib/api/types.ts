@@ -29,6 +29,10 @@ export interface ConnectionListItem {
 	connected: boolean;
 }
 
+export interface ConnectResult {
+	evictedIds: string[];
+}
+
 export interface TestConnectionRequest {
 	engine?: EngineKind | string;
 	host: string;
@@ -43,6 +47,23 @@ export interface DatabaseInfo {
 	charset?: string | null;
 	collation?: string | null;
 	isSystem: boolean;
+}
+
+export interface CharsetInfo {
+	name: string;
+	defaultCollation?: string | null;
+	description?: string | null;
+}
+
+export interface CollationInfo {
+	name: string;
+	charset: string;
+	isDefault: boolean;
+}
+
+export interface CharsetCatalog {
+	charsets: CharsetInfo[];
+	collations: CollationInfo[];
 }
 
 export interface TableInfo {
@@ -148,10 +169,18 @@ export type ContextMenuAction =
 	| 'connect'
 	| 'disconnect'
 	| 'new-query'
+	| 'create-database'
 	| 'refresh'
 	| 'open-data'
 	| 'open-structure'
 	| 'open-ddl';
+
+export interface CreateDatabasePrompt {
+	connectionId: string;
+	connectionName: string;
+	engine: string;
+	database?: string | null;
+}
 
 export interface ContextMenuState {
 	x: number;

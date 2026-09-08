@@ -11,6 +11,29 @@ pub struct DatabaseInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CharsetInfo {
+    pub name: String,
+    pub default_collation: Option<String>,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollationInfo {
+    pub name: String,
+    pub charset: String,
+    pub is_default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CharsetCatalog {
+    pub charsets: Vec<CharsetInfo>,
+    pub collations: Vec<CollationInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TableInfo {
     pub name: String,
     pub engine: Option<String>,

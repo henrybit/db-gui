@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { workspace } from '$lib/stores/workspace.svelte';
+	import { schemaNoun } from '$lib/engine';
 	import type { ContextMenuAction } from '$lib/api/types';
 
 	const menu = $derived(workspace.contextMenu);
@@ -25,6 +26,9 @@
 				break;
 			case 'new-query':
 				if (connectionId) workspace.openQuery(connectionId, schema);
+				break;
+			case 'create-database':
+				if (connectionId) workspace.askCreateDatabase(connectionId);
 				break;
 			case 'refresh':
 				if (connectionId) void workspace.refresh(connectionId, schema);
@@ -55,11 +59,20 @@
 		connect: 'Connect',
 		disconnect: 'Disconnect',
 		'new-query': 'New Query',
+		'create-database': 'Create Database…',
 		refresh: 'Refresh',
 		'open-data': 'Open Table',
 		'open-structure': 'Design Table',
 		'open-ddl': 'View DDL'
 	};
+
+	function labelFor(action: ContextMenuAction): string {
+		if (action === 'create-database') {
+			const connection = workspace.connections.find((item) => item.id === menu?.connectionId);
+			return `Create ${schemaNoun(connection?.engine)}…`;
+		}
+		return labels[action];
+	}
 </script>
 
 {#if menu}
@@ -70,7 +83,7 @@
 		role="menu"
 	>
 		{#each menu.actions as action (action)}
-			<button type="button" onclick={() => run(action)}>{labels[action]}</button>
+			<button type="button" onclick={() => run(action)}>{labelFor(action)}</button>
 		{/each}
 	</div>
 	<button class="modal-backdrop" style="background:transparent" onclick={() => workspace.closeMenu()}

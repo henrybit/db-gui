@@ -1,12 +1,14 @@
 import { api, errorMessage, isTauriRuntime } from '$lib/api/tauri';
-import { qualifyIdent } from '$lib/engine';
+import { qualifyIdent, schemaNoun } from '$lib/engine';
 import { uid } from '$lib/format';
 import { afterPaint, runExclusive } from '$lib/runtime/jobs';
+import { connectStatus, forgetExpandedKeys } from '$lib/sessions';
 import type {
 	ConnectionListItem,
 	ConnectionProfile,
 	ContextMenuAction,
 	ContextMenuState,
+	CreateDatabasePrompt,
 	DatabaseInfo,
 	FolderKind,
 	IndexInfo,
@@ -47,6 +49,7 @@ class WorkspaceStore {
 	editingConnection = $state<ConnectionProfile | null>(null);
 	passwordPrompt = $state<{ id: string; name: string } | null>(null);
 	confirmDelete = $state<{ id: string; name: string } | null>(null);
+	createDatabasePrompt = $state<CreateDatabasePrompt | null>(null);
 	contextMenu = $state<ContextMenuState | null>(null);
 	queryResults = $state<Record<string, QueryResult | null>>({});
 	lastMessage = $state<string | null>(null);
@@ -151,6 +154,7 @@ class WorkspaceStore {
 		this.begin(key);
 		try {
 			await api.deleteConnection(this.confirmDelete.id);
+			this.forgetSession(this.confirmDelete.id);
 			this.tabs = this.tabs.filter((tab) => tab.connectionId !== this.confirmDelete?.id);
 			if (this.selection?.connectionId === this.confirmDelete.id) this.selection = null;
 			this.confirmDelete = null;
@@ -160,6 +164,48 @@ class WorkspaceStore {
 		} finally {
 			this.end(key);
 		}
+	}
+
+	askCreateDatabase(id: string) {
+		const item = this.connections.find((c) => c.id === id);
+		if (!item?.connected) return;
+		this.error = null;
+		this.createDatabasePrompt = {
+			connectionId: item.id,
+			connectionName: item.name,
+			engine: item.engine,
+			database: item.database
+		};
+		this.closeMenu();
+	}
+
+	async confirmCreateDatabase(name: string, charset?: string, collation?: string) {
+		if (!this.createDatabasePrompt) return;
+		const prompt = this.createDatabasePrompt;
+		const created = name.trim();
+		if (!created) return;
+		const key = `create-db:${prompt.connectionId}`;
+		this.begin(key);
+		this.error = null;
+		try {
+			await api.createDatabase(prompt.connectionId, created, charset, collation);
+			this.createDatabasePrompt = null;
+			this.expanded = new Set([...this.expanded, `conn:${prompt.connectionId}`]);
+			await this.loadDatabases(prompt.connectionId);
+			this.selectDatabase(prompt.connectionId, created);
+			this.status = `Created ${schemaNoun(prompt.engine)} ${created}`;
+		} catch (error) {
+			this.error = errorMessage(error);
+		} finally {
+			this.end(key);
+		}
+	}
+
+	activateConnection(id: string) {
+		this.selectConnection(id);
+		const item = this.connections.find((c) => c.id === id);
+		if (!item || item.connected || this.isPending(`connect:${id}`)) return;
+		this.connect(id);
 	}
 
 	connect(id: string, password?: string) {
@@ -172,12 +218,17 @@ class WorkspaceStore {
 		this.error = null;
 		try {
 			await afterPaint();
-			await api.connect(id, password);
+			const result = await api.connect(id, password);
 			this.passwordPrompt = null;
+			const evictedIds = result.evictedIds ?? [];
+			const evictedNames = evictedIds.map(
+				(evictedId) => this.connections.find((item) => item.id === evictedId)?.name ?? evictedId
+			);
+			for (const evictedId of evictedIds) this.forgetSession(evictedId);
 			await this.boot();
 			this.expanded = new Set([...this.expanded, `conn:${id}`]);
 			void this.loadDatabases(id);
-			this.status = 'Connected';
+			this.status = connectStatus(evictedNames);
 		} catch (error) {
 			const message = errorMessage(error);
 			const item = this.connections.find((c) => c.id === id);
@@ -200,8 +251,7 @@ class WorkspaceStore {
 		try {
 			await afterPaint();
 			await api.disconnect(id);
-			delete this.schema[id];
-			this.schema = { ...this.schema };
+			this.forgetSession(id);
 			await this.boot();
 			this.status = 'Disconnected';
 		} catch (error) {
@@ -209,6 +259,14 @@ class WorkspaceStore {
 		} finally {
 			this.end(key);
 		}
+	}
+
+	private forgetSession(id: string) {
+		if (this.schema[id]) {
+			delete this.schema[id];
+			this.schema = { ...this.schema };
+		}
+		this.expanded = forgetExpandedKeys(this.expanded, id);
 	}
 
 	toggleExpanded(key: string) {

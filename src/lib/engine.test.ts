@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { engineLabel, normalizeEngine, qualifyIdent, quoteIdent } from './engine';
+import { engineLabel, normalizeEngine, qualifyIdent, quoteIdent, schemaNoun } from './engine';
 
 describe('engine helpers', () => {
 	it('normalizes engine aliases', () => {
@@ -7,6 +7,8 @@ describe('engine helpers', () => {
 		expect(normalizeEngine('pgsql')).toBe('postgres');
 		expect(normalizeEngine('mysql')).toBe('mysql');
 		expect(engineLabel('postgres')).toBe('PostgreSQL');
+		expect(schemaNoun('mysql')).toBe('Database');
+		expect(schemaNoun('pgsql')).toBe('Schema');
 	});
 
 	it('quotes identifiers per dialect', () => {

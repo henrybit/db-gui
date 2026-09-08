@@ -9,6 +9,8 @@ commands.allow = [
   "connect_session",
   "disconnect_session",
   "list_databases",
+  "create_database",
+  "list_charset_catalog",
   "list_tables",
   "list_views",
   "list_indexes",

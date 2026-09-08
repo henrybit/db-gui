@@ -87,12 +87,13 @@
 			class:selected={isSelected(connection.id)}
 			style="padding-left:8px"
 			onclick={() => workspace.selectConnection(connection.id)}
+			ondblclick={() => workspace.activateConnection(connection.id)}
 			onkeydown={(event) => onActivate(event, () => workspace.selectConnection(connection.id))}
 			oncontextmenu={(event) =>
 				workspace.openMenu(event, {
 					connectionId: connection.id,
 					actions: connection.connected
-						? ['new-query', 'refresh', 'disconnect', 'edit-connection', 'delete-connection']
+						? ['new-query', 'create-database', 'refresh', 'disconnect', 'edit-connection', 'delete-connection']
 						: ['connect', 'edit-connection', 'delete-connection', 'new-connection']
 				})}
 			role="button"
@@ -107,6 +108,7 @@
 					workspace.toggleExpanded(connKey);
 					if (!connOpen && connection.connected) void workspace.loadDatabases(connection.id);
 				}}
+				ondblclick={(event) => event.stopPropagation()}
 			>
 				{#if connOpen}<ChevronDown size={12} />{:else}<ChevronRight size={12} />{/if}
 			</button>
@@ -131,7 +133,7 @@
 						workspace.openMenu(event, {
 							connectionId: connection.id,
 							schema: database.name,
-							actions: ['new-query', 'refresh']
+							actions: ['new-query', 'create-database', 'refresh']
 						})}
 					role="button"
 					tabindex="0"

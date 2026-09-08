@@ -1,11 +1,14 @@
 use crate::db::{DatabaseEngine, LiveEngine};
 use crate::error::{AppError, AppResult};
-use crate::models::ConnectionProfile;
+use crate::models::{ConnectResult, ConnectionProfile};
 use crate::runtime::{run_blocking, run_db};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tokio::sync::RwLock;
+
+pub const MAX_OPEN_SESSIONS: usize = 5;
 
 #[derive(Serialize, Deserialize, Default)]
 struct StoredProfiles {
@@ -16,6 +19,8 @@ pub struct AppState {
     data_file: PathBuf,
     profiles: RwLock<Vec<ConnectionProfile>>,
     sessions: DashMap<String, LiveEngine>,
+    session_order: Mutex<Vec<String>>,
+    connect_lock: tokio::sync::Mutex<()>,
 }
 
 impl AppState {
@@ -33,6 +38,8 @@ impl AppState {
             data_file,
             profiles: RwLock::new(profiles),
             sessions: DashMap::new(),
+            session_order: Mutex::new(Vec::new()),
+            connect_lock: tokio::sync::Mutex::new(()),
         })
     }
 
@@ -40,7 +47,10 @@ impl AppState {
         self.profiles.read().await.clone()
     }
 
-    pub async fn upsert_profile(&self, mut profile: ConnectionProfile) -> AppResult<ConnectionProfile> {
+    pub async fn upsert_profile(
+        &self,
+        mut profile: ConnectionProfile,
+    ) -> AppResult<ConnectionProfile> {
         if profile.name.trim().is_empty() {
             return Err(AppError::msg("connection name is required"));
         }
@@ -94,9 +104,16 @@ impl AppState {
             .ok_or_else(|| AppError::ProfileNotFound(id.to_string()))
     }
 
-    pub async fn connect(&self, id: &str, password_override: Option<String>) -> AppResult<()> {
+    pub async fn connect(
+        &self,
+        id: &str,
+        password_override: Option<String>,
+    ) -> AppResult<ConnectResult> {
+        let _guard = self.connect_lock.lock().await;
         if self.sessions.contains_key(id) {
-            return Ok(());
+            return Ok(ConnectResult {
+                evicted_ids: Vec::new(),
+            });
         }
         let mut profile = self.get_profile(id).await?;
         if let Some(password) = password_override {
@@ -113,11 +130,38 @@ impl AppState {
             }
         })
         .await?;
-        self.sessions.insert(id.to_string(), engine);
-        Ok(())
+
+        let mut closing = Vec::new();
+        let evicted_ids = {
+            let mut order = self
+                .session_order
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let evicted_ids = ids_to_evict(&order, id, MAX_OPEN_SESSIONS);
+            for evict_id in &evicted_ids {
+                order.retain(|existing| existing != evict_id);
+                if let Some((_, old)) = self.sessions.remove(evict_id) {
+                    closing.push(old);
+                }
+            }
+            self.sessions.insert(id.to_string(), engine);
+            order.push(id.to_string());
+            evicted_ids
+        };
+        for old in closing {
+            let _ = run_db(async move { old.close().await }).await;
+        }
+        Ok(ConnectResult { evicted_ids })
     }
 
     pub async fn disconnect(&self, id: &str) -> AppResult<()> {
+        {
+            let mut order = self
+                .session_order
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            order.retain(|existing| existing != id);
+        }
         let engine = self.sessions.remove(id).map(|(_, engine)| engine);
         if let Some(engine) = engine {
             run_db(async move { engine.close().await }).await?;
@@ -149,5 +193,56 @@ impl AppState {
             Ok(())
         })
         .await
+    }
+}
+
+fn ids_to_evict(open_order: &[String], connecting_id: &str, max: usize) -> Vec<String> {
+    if open_order.iter().any(|id| id == connecting_id) {
+        return Vec::new();
+    }
+    let keep_existing = max.saturating_sub(1);
+    open_order
+        .iter()
+        .take(open_order.len().saturating_sub(keep_existing))
+        .cloned()
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keeps_sessions_under_the_cap() {
+        let open = vec!["a".into(), "b".into()];
+        assert!(ids_to_evict(&open, "c", 5).is_empty());
+    }
+
+    #[test]
+    fn reconnect_does_not_evict() {
+        let open = vec!["a".into(), "b".into(), "c".into(), "d".into(), "e".into()];
+        assert!(ids_to_evict(&open, "c", 5).is_empty());
+    }
+
+    #[test]
+    fn sixth_connection_closes_the_oldest() {
+        let open = vec!["a".into(), "b".into(), "c".into(), "d".into(), "e".into()];
+        assert_eq!(ids_to_evict(&open, "f", 5), vec!["a".to_string()]);
+    }
+
+    #[test]
+    fn overflow_closes_multiple_oldest() {
+        let open = vec![
+            "a".into(),
+            "b".into(),
+            "c".into(),
+            "d".into(),
+            "e".into(),
+            "f".into(),
+        ];
+        assert_eq!(
+            ids_to_evict(&open, "g", 5),
+            vec!["a".to_string(), "b".to_string()]
+        );
     }
 }

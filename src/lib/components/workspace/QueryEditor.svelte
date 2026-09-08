@@ -5,6 +5,7 @@
 	import { afterPaint } from '$lib/runtime/jobs';
 	import { isPostgres } from '$lib/engine';
 	import { workspace } from '$lib/stores/workspace.svelte';
+	import StackSplit from '$lib/components/layout/StackSplit.svelte';
 	import DataGrid from './DataGrid.svelte';
 
 	let {
@@ -68,22 +69,30 @@
 		<button class="btn primary" onclick={run} disabled={running}>{running ? 'Running…' : 'Run'}</button>
 		<span style="color:var(--text-muted)">{schemaHint} · ⌘/Ctrl+Enter</span>
 	</div>
-	<textarea class="sql-editor" bind:value={text} onkeydown={onKey} spellcheck="false"></textarea>
-	{#if error}
-		<div class="message error">{error}</div>
-	{:else if result}
-		<div class="message">
-			{result.statementKind}
-			{#if result.columns.length}
-				· {formatNumber(result.rows.length)} rows
+	<StackSplit>
+		{#snippet top()}
+			<textarea class="sql-editor" bind:value={text} onkeydown={onKey} spellcheck="false"></textarea>
+		{/snippet}
+		{#snippet bottom()}
+			{#if error}
+				<div class="message error">{error}</div>
+			{:else if result}
+				<div class="message">
+					{result.statementKind}
+					{#if result.columns.length}
+						· {formatNumber(result.rows.length)} rows
+					{:else}
+						· {formatNumber(result.affectedRows)} affected
+					{/if}
+					· {formatDuration(result.durationMs)}
+					{#if result.truncated}· truncated{/if}
+				</div>
+				{#if result.columns.length}
+					<DataGrid {result} />
+				{/if}
 			{:else}
-				· {formatNumber(result.affectedRows)} affected
+				<div class="empty">Run a query to see results</div>
 			{/if}
-			· {formatDuration(result.durationMs)}
-			{#if result.truncated}· truncated{/if}
-		</div>
-		{#if result.columns.length}
-			<DataGrid {result} />
-		{/if}
-	{/if}
+		{/snippet}
+	</StackSplit>
 </div>

@@ -70,6 +70,12 @@ pub struct ConnectionListItem {
     pub connected: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectResult {
+    pub evicted_ids: Vec<String>,
+}
+
 fn default_engine() -> String {
     "mysql".into()
 }
@@ -99,7 +105,10 @@ mod tests {
     #[test]
     fn parses_engine_aliases() {
         assert_eq!(EngineKind::parse("mysql").unwrap(), EngineKind::MySql);
-        assert_eq!(EngineKind::parse("PostgreSQL").unwrap(), EngineKind::Postgres);
+        assert_eq!(
+            EngineKind::parse("PostgreSQL").unwrap(),
+            EngineKind::Postgres
+        );
         assert_eq!(EngineKind::parse("pgsql").unwrap(), EngineKind::Postgres);
         assert!(EngineKind::parse("oracle").is_err());
     }

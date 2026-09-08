@@ -1,6 +1,6 @@
 use crate::db::LiveEngine;
 use crate::error::AppResult;
-use crate::models::{ConnectionListItem, ConnectionProfile, TestConnectionRequest};
+use crate::models::{ConnectResult, ConnectionListItem, ConnectionProfile, TestConnectionRequest};
 use crate::runtime::run_db;
 use crate::state::AppState;
 use tauri::State;
@@ -40,7 +40,7 @@ pub async fn connect_session(
     state: State<'_, AppState>,
     id: String,
     password: Option<String>,
-) -> AppResult<()> {
+) -> AppResult<ConnectResult> {
     state.connect(&id, password).await
 }
 

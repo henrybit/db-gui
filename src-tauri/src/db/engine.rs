@@ -2,8 +2,8 @@ use super::mysql::MySqlEngine;
 use super::postgres::PostgresEngine;
 use crate::error::AppResult;
 use crate::models::{
-    ColumnInfo, ConnectionProfile, DatabaseInfo, EngineKind, IndexInfo, ObjectKind, QueryResult,
-    RoutineInfo, TableInfo, TestConnectionRequest, TriggerInfo, ViewInfo,
+    CharsetCatalog, ColumnInfo, ConnectionProfile, DatabaseInfo, EngineKind, IndexInfo, ObjectKind,
+    QueryResult, RoutineInfo, TableInfo, TestConnectionRequest, TriggerInfo, ViewInfo,
 };
 use async_trait::async_trait;
 
@@ -11,6 +11,13 @@ use async_trait::async_trait;
 pub trait DatabaseEngine: Send + Sync {
     async fn ping(&self) -> AppResult<()>;
     async fn list_databases(&self) -> AppResult<Vec<DatabaseInfo>>;
+    async fn create_database(
+        &self,
+        name: &str,
+        charset: Option<&str>,
+        collation: Option<&str>,
+    ) -> AppResult<()>;
+    async fn list_charset_catalog(&self) -> AppResult<CharsetCatalog>;
     async fn list_tables(&self, schema: &str) -> AppResult<Vec<TableInfo>>;
     async fn list_views(&self, schema: &str) -> AppResult<Vec<ViewInfo>>;
     async fn list_indexes(&self, schema: &str) -> AppResult<Vec<IndexInfo>>;
@@ -71,6 +78,19 @@ impl DatabaseEngine for LiveEngine {
         dispatch_engine!(self, list_databases)
     }
 
+    async fn create_database(
+        &self,
+        name: &str,
+        charset: Option<&str>,
+        collation: Option<&str>,
+    ) -> AppResult<()> {
+        dispatch_engine!(self, create_database, name, charset, collation)
+    }
+
+    async fn list_charset_catalog(&self) -> AppResult<CharsetCatalog> {
+        dispatch_engine!(self, list_charset_catalog)
+    }
+
     async fn list_tables(&self, schema: &str) -> AppResult<Vec<TableInfo>> {
         dispatch_engine!(self, list_tables, schema)
     }
@@ -121,4 +141,3 @@ impl DatabaseEngine for LiveEngine {
         dispatch_engine!(self, close)
     }
 }
-

@@ -1,10 +1,12 @@
 use super::engine::DatabaseEngine;
-use super::ident::{qualify_pg as qualify, quote_ident_pg as quote_ident, validate_ident};
+use super::ident::{
+    create_pg_schema_sql, qualify_pg as qualify, quote_ident_pg as quote_ident, validate_ident,
+};
 use super::sql::statement_kind;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    ColumnInfo, ConnectionProfile, DatabaseInfo, IndexInfo, ObjectKind, QueryResult, RoutineInfo,
-    TableInfo, TestConnectionRequest, TriggerInfo, ViewInfo,
+    CharsetCatalog, ColumnInfo, ConnectionProfile, DatabaseInfo, IndexInfo, ObjectKind,
+    QueryResult, RoutineInfo, TableInfo, TestConnectionRequest, TriggerInfo, ViewInfo,
 };
 use async_trait::async_trait;
 use deadpool_postgres::{Config, Pool, PoolConfig, Runtime};
@@ -103,6 +105,25 @@ impl DatabaseEngine for PostgresEngine {
                 }
             })
             .collect())
+    }
+
+    async fn create_database(
+        &self,
+        name: &str,
+        _charset: Option<&str>,
+        _collation: Option<&str>,
+    ) -> AppResult<()> {
+        let sql = create_pg_schema_sql(name)?;
+        let client = self.pool.get().await?;
+        client.simple_query(&sql).await?;
+        Ok(())
+    }
+
+    async fn list_charset_catalog(&self) -> AppResult<CharsetCatalog> {
+        Ok(CharsetCatalog {
+            charsets: Vec::new(),
+            collations: Vec::new(),
+        })
     }
 
     async fn list_tables(&self, schema: &str) -> AppResult<Vec<TableInfo>> {
@@ -448,7 +469,11 @@ impl DatabaseEngine for PostgresEngine {
             let _ = client.simple_query("RESET search_path").await;
         }
         let messages = result?;
-        Ok(simple_query_result(messages, sql, started.elapsed().as_millis() as u64))
+        Ok(simple_query_result(
+            messages,
+            sql,
+            started.elapsed().as_millis() as u64,
+        ))
     }
 
     async fn close(self) -> AppResult<()> {
@@ -468,7 +493,9 @@ fn create_pool(
     cfg.host = Some(host.to_string());
     cfg.port = Some(if port == 0 { 5432 } else { port });
     cfg.user = Some(username.to_string());
-    cfg.password = password.filter(|value| !value.is_empty()).map(str::to_string);
+    cfg.password = password
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
     let dbname = database
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -478,7 +505,11 @@ fn create_pool(
     Ok(cfg.create_pool(Some(Runtime::Tokio1), NoTls)?)
 }
 
-fn simple_query_result(messages: Vec<SimpleQueryMessage>, sql: &str, duration_ms: u64) -> QueryResult {
+fn simple_query_result(
+    messages: Vec<SimpleQueryMessage>,
+    sql: &str,
+    duration_ms: u64,
+) -> QueryResult {
     let mut columns = Vec::new();
     let mut rows = Vec::new();
     let mut current_columns = Vec::new();

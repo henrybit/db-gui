@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
+	CharsetCatalog,
 	ColumnInfo,
+	ConnectResult,
 	ConnectionListItem,
 	ConnectionProfile,
 	DatabaseInfo,
@@ -36,11 +38,27 @@ export const api = {
 	testConnection: (request: TestConnectionRequest) => call<void>('test_connection', { request }),
 
 	connect: (id: string, password?: string | null) =>
-		call<void>('connect_session', { id, password: password ?? null }),
+		call<ConnectResult>('connect_session', { id, password: password ?? null }),
 
 	disconnect: (id: string) => call<void>('disconnect_session', { id }),
 
 	listDatabases: (connectionId: string) => call<DatabaseInfo[]>('list_databases', { connectionId }),
+
+	createDatabase: (
+		connectionId: string,
+		name: string,
+		charset?: string | null,
+		collation?: string | null
+	) =>
+		call<void>('create_database', {
+			connectionId,
+			name,
+			charset: charset?.trim() ? charset.trim() : null,
+			collation: collation?.trim() ? collation.trim() : null
+		}),
+
+	listCharsetCatalog: (connectionId: string) =>
+		call<CharsetCatalog>('list_charset_catalog', { connectionId }),
 
 	listTables: (connectionId: string, schema: string) =>
 		call<TableInfo[]>('list_tables', { connectionId, schema }),
