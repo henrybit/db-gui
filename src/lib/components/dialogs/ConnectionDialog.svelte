@@ -2,6 +2,11 @@
 	import { workspace } from '$lib/stores/workspace.svelte';
 	import { api, errorMessage } from '$lib/api/tauri';
 	import { ENGINE_PRESETS, engineLabel, normalizeEngine, type EngineKind } from '$lib/engine';
+	import {
+		connectionUrlPlaceholder,
+		looksLikeConnectionUrl,
+		parseConnectionUrl
+	} from '$lib/connection-url';
 	import type { ConnectionProfile } from '$lib/api/types';
 
 	let profile = $state<ConnectionProfile>(
@@ -17,9 +22,17 @@
 			savePassword: true
 		}
 	);
+	let connectionUrl = $state('');
+	let urlMessage = $state<string | null>(null);
 	let testing = $state(false);
 	let testMessage = $state<string | null>(null);
 	const engine = $derived(normalizeEngine(profile.engine));
+	const urlPlaceholder = $derived(connectionUrlPlaceholder(engine));
+	const hostPlaceholder = $derived(
+		engine === 'postgres'
+			? 'host or paste postgresql://…'
+			: 'host or paste mysql://…'
+	);
 	const databaseHint = $derived(
 		engine === 'postgres' ? 'database to connect (default postgres)' : 'optional'
 	);
@@ -36,6 +49,64 @@
 			profile.name = preset.name;
 		}
 		profile.engine = next;
+		if (connectionUrl.trim()) {
+			const parsed = parseConnectionUrl(connectionUrl);
+			if (parsed && parsed.engine !== next) {
+				connectionUrl = '';
+				urlMessage = null;
+			}
+		}
+	}
+
+	function applyParsedUrl(raw: string, options?: { fromHost?: boolean; reportInvalid?: boolean }) {
+		const parsed = parseConnectionUrl(raw);
+		if (!parsed) {
+			if (options?.reportInvalid && looksLikeConnectionUrl(raw)) {
+				urlMessage = 'Invalid connection URL';
+			}
+			return false;
+		}
+
+		profile.engine = parsed.engine;
+		profile.host = parsed.host;
+		profile.port = parsed.port;
+		profile.username = parsed.username;
+		profile.password = parsed.password;
+		profile.database = parsed.database;
+		if (
+			!profile.name ||
+			profile.name === 'MySQL' ||
+			profile.name === 'PostgreSQL' ||
+			profile.name === ENGINE_PRESETS.mysql.name ||
+			profile.name === ENGINE_PRESETS.postgres.name
+		) {
+			profile.name = ENGINE_PRESETS[parsed.engine].name;
+		}
+		connectionUrl = raw.trim();
+		urlMessage = options?.fromHost
+			? 'Connection URL detected and applied'
+			: 'URL applied to connection fields';
+		return true;
+	}
+
+	function onConnectionUrlInput() {
+		urlMessage = null;
+		if (!connectionUrl.trim()) return;
+		applyParsedUrl(connectionUrl);
+	}
+
+	function onConnectionUrlBlur() {
+		if (!connectionUrl.trim()) {
+			urlMessage = null;
+			return;
+		}
+		applyParsedUrl(connectionUrl, { reportInvalid: true });
+	}
+
+	function onHostChange() {
+		if (looksLikeConnectionUrl(profile.host)) {
+			applyParsedUrl(profile.host, { fromHost: true });
+		}
 	}
 
 	async function test() {
@@ -68,7 +139,7 @@
 </script>
 
 <div class="modal-backdrop">
-	<div class="modal" role="dialog" aria-modal="true">
+	<div class="modal modal-wide" role="dialog" aria-modal="true">
 		<header>{engineLabel(engine)} Connection</header>
 		<div class="body">
 			<label class="field">
@@ -82,12 +153,30 @@
 				</select>
 			</label>
 			<label class="field">
+				<span>URL</span>
+				<input
+					bind:value={connectionUrl}
+					placeholder={urlPlaceholder}
+					oninput={onConnectionUrlInput}
+					onblur={onConnectionUrlBlur}
+					onpaste={() => queueMicrotask(onConnectionUrlInput)}
+				/>
+			</label>
+			{#if urlMessage}
+				<div class="message">{urlMessage}</div>
+			{/if}
+			<label class="field">
 				<span>Name</span>
 				<input bind:value={profile.name} />
 			</label>
 			<label class="field">
 				<span>Host</span>
-				<input bind:value={profile.host} />
+				<input
+					bind:value={profile.host}
+					placeholder={hostPlaceholder}
+					oninput={onHostChange}
+					onpaste={() => queueMicrotask(onHostChange)}
+				/>
 			</label>
 			<label class="field">
 				<span>Port</span>
