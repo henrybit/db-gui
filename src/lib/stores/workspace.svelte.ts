@@ -53,6 +53,7 @@ class WorkspaceStore {
 	contextMenu = $state<ContextMenuState | null>(null);
 	queryResults = $state<Record<string, QueryResult | null>>({});
 	lastMessage = $state<string | null>(null);
+	tableDataEpoch = $state<Record<string, number>>({});
 
 	get activeTab(): Tab | null {
 		return this.tabs.find((tab) => tab.id === this.activeTabId) ?? null;
@@ -266,6 +267,16 @@ class WorkspaceStore {
 			delete this.schema[id];
 			this.schema = { ...this.schema };
 		}
+		const prefix = `${id}:`;
+		const nextEpoch = { ...this.tableDataEpoch };
+		let epochChanged = false;
+		for (const key of Object.keys(nextEpoch)) {
+			if (key.startsWith(prefix)) {
+				delete nextEpoch[key];
+				epochChanged = true;
+			}
+		}
+		if (epochChanged) this.tableDataEpoch = nextEpoch;
 		this.expanded = forgetExpandedKeys(this.expanded, id);
 	}
 
@@ -420,14 +431,15 @@ class WorkspaceStore {
 		return `folder:${connectionId}:${schema}:${folder}`;
 	}
 
-	async ensureFolder(connectionId: string, schema: string, folder: FolderKind) {
+	async ensureFolder(connectionId: string, schema: string, folder: FolderKind, force = false) {
 		const cached = this.schema[connectionId];
 		if (
-			(folder === 'tables' && cached?.tables[schema]) ||
-			(folder === 'views' && cached?.views[schema]) ||
-			(folder === 'indexes' && cached?.indexes[schema]) ||
-			(folder === 'triggers' && cached?.triggers[schema]) ||
-			(folder === 'functions' && cached?.routines[schema])
+			!force &&
+			((folder === 'tables' && cached?.tables[schema]) ||
+				(folder === 'views' && cached?.views[schema]) ||
+				(folder === 'indexes' && cached?.indexes[schema]) ||
+				(folder === 'triggers' && cached?.triggers[schema]) ||
+				(folder === 'functions' && cached?.routines[schema]))
 		) {
 			return;
 		}
@@ -466,18 +478,48 @@ class WorkspaceStore {
 		}
 	}
 
-	refresh(connectionId: string, schema?: string) {
-		this.closeMenu();
-		void this.refreshInBackground(connectionId, schema);
+	private tableDataKey(connectionId: string, schema: string, name: string) {
+		return `${connectionId}:${schema}:${name}`;
 	}
 
-	private async refreshInBackground(connectionId: string, schema?: string) {
-		const key = `refresh:${connectionId}:${schema ?? ''}`;
+	tableDataRevision(connectionId: string, schema: string, name: string): number {
+		return this.tableDataEpoch[this.tableDataKey(connectionId, schema, name)] ?? 0;
+	}
+
+	private bumpTableData(connectionId: string, schema: string, objectName: string) {
+		const key = this.tableDataKey(connectionId, schema, objectName);
+		this.tableDataEpoch[key] = (this.tableDataEpoch[key] ?? 0) + 1;
+	}
+
+	refresh(connectionId: string, schema?: string, folder?: FolderKind, objectName?: string) {
+		this.closeMenu();
+		void this.refreshInBackground(connectionId, schema, folder, objectName);
+	}
+
+	private async refreshInBackground(
+		connectionId: string,
+		schema?: string,
+		folder?: FolderKind,
+		objectName?: string
+	) {
+		const key = `refresh:${connectionId}:${schema ?? ''}:${folder ?? ''}:${objectName ?? ''}`;
 		this.begin(key);
 		this.error = null;
 		try {
 			await afterPaint();
+			if (schema && folder) {
+				await this.ensureFolder(connectionId, schema, folder, true);
+				if (this.error) return;
+				if (objectName && (folder === 'tables' || folder === 'views')) {
+					this.bumpTableData(connectionId, schema, objectName);
+					this.status = `Refreshed ${objectName}`;
+				} else {
+					this.status = `Refreshed ${folderLabel(folder)}`;
+				}
+				return;
+			}
 			await this.loadDatabases(connectionId);
+			if (this.error) return;
 			if (schema) {
 				const [tables, views, indexes, triggers, routines] = await Promise.all([
 					api.listTables(connectionId, schema),

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { workspace } from '$lib/stores/workspace.svelte';
+	import { folderLabel, workspace } from '$lib/stores/workspace.svelte';
 	import { schemaNoun } from '$lib/engine';
 	import type { ContextMenuAction } from '$lib/api/types';
 
@@ -7,7 +7,7 @@
 
 	function run(action: ContextMenuAction) {
 		if (!menu) return;
-		const { connectionId, schema, objectKind, objectName } = menu;
+		const { connectionId, schema, folder, objectKind, objectName } = menu;
 		switch (action) {
 			case 'new-connection':
 				workspace.openNewConnection();
@@ -31,7 +31,7 @@
 				if (connectionId) workspace.askCreateDatabase(connectionId);
 				break;
 			case 'refresh':
-				if (connectionId) void workspace.refresh(connectionId, schema);
+				if (connectionId) void workspace.refresh(connectionId, schema, folder, objectName);
 				break;
 			case 'open-data':
 				if (connectionId && schema && objectName) {
@@ -70,6 +70,19 @@
 		if (action === 'create-database') {
 			const connection = workspace.connections.find((item) => item.id === menu?.connectionId);
 			return `Create ${schemaNoun(connection?.engine)}…`;
+		}
+		if (action === 'refresh') {
+			if (menu?.objectName) {
+				if (menu.objectKind === 'view') return 'Refresh View';
+				if (menu.objectKind === 'table') return 'Refresh Table';
+				return 'Refresh';
+			}
+			if (menu?.folder) return `Refresh ${folderLabel(menu.folder)}`;
+			if (menu?.schema) {
+				const connection = workspace.connections.find((item) => item.id === menu.connectionId);
+				return `Refresh ${schemaNoun(connection?.engine)}`;
+			}
+			return 'Refresh Connection';
 		}
 		return labels[action];
 	}

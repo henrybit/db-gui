@@ -1,19 +1,29 @@
 <script lang="ts">
 	import type { QueryResult } from '$lib/api/types';
+	import CellDetailDrawer from './CellDetailDrawer.svelte';
 
 	const ROW_HEIGHT = 26;
 	const OVERSCAN = 12;
+	/** Show expand control when content is likely clipped by the 420px cell max-width. */
+	const EXPAND_MIN_CHARS = 48;
 
 	let {
 		result,
-		selectedRow = $bindable(0)
+		selectedRow = $bindable(0),
+		onRowContextMenu
 	}: {
 		result: QueryResult;
 		selectedRow?: number;
+		onRowContextMenu?: (event: MouseEvent, index: number) => void;
 	} = $props();
 
 	let scrollTop = $state(0);
 	let viewportHeight = $state(360);
+	let detail = $state<{
+		columnName: string;
+		columnType?: string;
+		value: string;
+	} | null>(null);
 
 	const colCount = $derived(result.columns.length + 1);
 	const start = $derived(Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN));
@@ -26,6 +36,20 @@
 		const target = event.currentTarget as HTMLElement;
 		scrollTop = target.scrollTop;
 		viewportHeight = target.clientHeight;
+	}
+
+	function needsExpand(value: string): boolean {
+		return value.length >= EXPAND_MIN_CHARS || /[\r\n]/.test(value);
+	}
+
+	function openDetail(event: MouseEvent, cellIndex: number, value: string) {
+		event.stopPropagation();
+		const column = result.columns[cellIndex];
+		detail = {
+			columnName: column?.name ?? `Column ${cellIndex + 1}`,
+			columnType: column?.typeName,
+			value
+		};
 	}
 </script>
 
@@ -50,6 +74,10 @@
 				<tr
 					class:selected={selectedRow === index}
 					onclick={() => (selectedRow = index)}
+					oncontextmenu={(event) => {
+						selectedRow = index;
+						onRowContextMenu?.(event, index);
+					}}
 					onkeydown={(event) => event.key === 'Enter' && (selectedRow = index)}
 					tabindex="0"
 				>
@@ -58,6 +86,19 @@
 						<td title={cell ?? 'NULL'}>
 							{#if cell == null}
 								<span class="null-cell">(NULL)</span>
+							{:else if needsExpand(cell)}
+								<span class="cell-inner">
+									<span class="cell-text">{cell}</span>
+									<button
+										class="cell-expand"
+										type="button"
+										title="View full value"
+										aria-label="View full value"
+										onclick={(event) => openDetail(event, cellIndex, cell)}
+									>
+										…
+									</button>
+								</span>
 							{:else}
 								{cell}
 							{/if}
@@ -79,3 +120,12 @@
 		<div class="empty" style="height:120px">No rows</div>
 	{/if}
 </div>
+
+{#if detail}
+	<CellDetailDrawer
+		columnName={detail.columnName}
+		columnType={detail.columnType}
+		value={detail.value}
+		onClose={() => (detail = null)}
+	/>
+{/if}

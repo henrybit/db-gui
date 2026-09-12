@@ -50,7 +50,14 @@
 	<button
 		class="toolbar-btn"
 		disabled={!active?.connected}
-		onclick={() => selected && workspace.refresh(selected.connectionId, selected.schema)}
+		onclick={() =>
+			selected &&
+			workspace.refresh(
+				selected.connectionId,
+				selected.schema,
+				selected.folder,
+				selected.objectName
+			)}
 	>
 		<RefreshCw size={14} />
 		Refresh

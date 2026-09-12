@@ -20,7 +20,15 @@
 			if (event.key === 'F5') {
 				event.preventDefault();
 				const selected = workspace.selection;
-				if (selected) void workspace.refresh(selected.connectionId, selected.schema);
+				if (!selected) return;
+				const connection = workspace.connections.find((item) => item.id === selected.connectionId);
+				if (!connection?.connected) return;
+				void workspace.refresh(
+					selected.connectionId,
+					selected.schema,
+					selected.folder,
+					selected.objectName
+				);
 			}
 			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'n' && event.shiftKey) {
 				event.preventDefault();

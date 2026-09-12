@@ -168,6 +168,13 @@
 								onActivate(event, () =>
 									workspace.selectFolder(connection.id, database.name, folder)
 								)}
+							oncontextmenu={(event) =>
+								workspace.openMenu(event, {
+									connectionId: connection.id,
+									schema: database.name,
+									folder,
+									actions: ['refresh']
+								})}
 							role="button"
 							tabindex="0"
 							data-selected={isSelected(connection.id, database.name, folder)}
@@ -236,8 +243,8 @@
 											objectName: display,
 											actions:
 												kind === 'table' || kind === 'view'
-													? ['open-data', 'open-ddl', 'new-query']
-													: ['open-ddl']
+													? ['open-data', 'open-ddl', 'new-query', 'refresh']
+													: ['open-ddl', 'refresh']
 										})}
 									role="button"
 									tabindex="0"
