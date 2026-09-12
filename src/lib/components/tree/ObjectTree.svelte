@@ -16,6 +16,7 @@
 	import { workspace, folderLabel } from '$lib/stores/workspace.svelte';
 	import { engineLabel, isPostgres } from '$lib/engine';
 	import type { FolderKind } from '$lib/api/types';
+	import { t } from '$lib/i18n/i18n.svelte';
 
 	const folders: FolderKind[] = ['tables', 'views', 'indexes', 'triggers', 'functions'];
 
@@ -67,17 +68,17 @@
 </script>
 
 <div class="pane-title">
-	<span>Connections</span>
+	<span>{t('tree.connections')}</span>
 	<button
 		class="toolbar-btn"
 		style="height:22px;padding:0 6px"
 		type="button"
-		onclick={() => workspace.openNewConnection()}>New</button
+		onclick={() => workspace.openNewConnection()}>{t('tree.new')}</button
 	>
 </div>
 <nav class="tree">
 	{#if workspace.connections.length === 0}
-		<div class="empty">No saved connections</div>
+		<div class="empty">{t('tree.noConnections')}</div>
 	{/if}
 	{#each workspace.connections as connection (connection.id)}
 		{@const connKey = `conn:${connection.id}`}
@@ -150,7 +151,7 @@
 						{#if dbOpen}<ChevronDown size={12} />{:else}<ChevronRight size={12} />{/if}
 					</button>
 					<span class="icon" style="color:#2563eb"><Database size={14} /></span>
-					<span class="truncate" title={isPostgres(connection.engine) ? 'Schema' : 'Database'}
+					<span class="truncate" title={isPostgres(connection.engine) ? t('tree.schema') : t('tree.database')}
 						>{database.name}</span
 					>
 				</div>

@@ -1,3 +1,5 @@
+import { t } from '$lib/i18n/i18n.svelte';
+
 export const MAX_OPEN_SESSIONS = 5;
 
 /** Oldest open session IDs that must close before `connectingId` can occupy a slot. */
@@ -23,6 +25,9 @@ export function forgetExpandedKeys(expanded: Iterable<string>, connectionId: str
 }
 
 export function connectStatus(evictedNames: string[]): string {
-	if (evictedNames.length === 0) return 'Connected';
-	return `Connected · closed ${evictedNames.join(', ')} (max ${MAX_OPEN_SESSIONS} sessions)`;
+	if (evictedNames.length === 0) return t('status.connected');
+	return t('status.connectedClosed', {
+		names: evictedNames.join(', '),
+		max: MAX_OPEN_SESSIONS
+	});
 }

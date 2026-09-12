@@ -1,6 +1,7 @@
 import { api, errorMessage, isTauriRuntime } from '$lib/api/tauri';
-import { qualifyIdent, schemaNoun } from '$lib/engine';
+import { qualifyIdent } from '$lib/engine';
 import { uid } from '$lib/format';
+import { folderMessageKey, schemaNounLabel, t } from '$lib/i18n/i18n.svelte';
 import { afterPaint, runExclusive } from '$lib/runtime/jobs';
 import { connectStatus, forgetExpandedKeys } from '$lib/sessions';
 import type {
@@ -42,7 +43,7 @@ class WorkspaceStore {
 	selection = $state<TreeSelection | null>(null);
 	tabs = $state<Tab[]>([]);
 	activeTabId = $state<string | null>(null);
-	status = $state('Ready');
+	status = $state(t('status.ready'));
 	error = $state<string | null>(null);
 	pending = $state<Set<string>>(new Set());
 	dialogOpen = $state(false);
@@ -81,12 +82,12 @@ class WorkspaceStore {
 
 	async boot() {
 		if (!isTauriRuntime()) {
-			this.status = 'Run `pnpm tauri dev` to connect to a database';
+			this.status = t('status.runTauri');
 			return;
 		}
 		try {
 			this.connections = await api.listConnections();
-			this.status = `${this.connections.length} saved connection(s)`;
+			this.status = t('status.savedConnections', { count: this.connections.length });
 		} catch (error) {
 			this.error = errorMessage(error);
 		}
@@ -134,7 +135,7 @@ class WorkspaceStore {
 			await api.upsertConnection(profile);
 			await this.boot();
 			this.dialogOpen = false;
-			this.status = `Saved ${profile.name}`;
+			this.status = t('status.saved', { name: profile.name });
 		} catch (error) {
 			this.error = errorMessage(error);
 		} finally {
@@ -194,7 +195,10 @@ class WorkspaceStore {
 			this.expanded = new Set([...this.expanded, `conn:${prompt.connectionId}`]);
 			await this.loadDatabases(prompt.connectionId);
 			this.selectDatabase(prompt.connectionId, created);
-			this.status = `Created ${schemaNoun(prompt.engine)} ${created}`;
+			this.status = t('status.created', {
+				noun: schemaNounLabel(prompt.engine),
+				name: created
+			});
 		} catch (error) {
 			this.error = errorMessage(error);
 		} finally {
@@ -254,7 +258,7 @@ class WorkspaceStore {
 			await api.disconnect(id);
 			this.forgetSession(id);
 			await this.boot();
-			this.status = 'Disconnected';
+			this.status = t('status.disconnected');
 		} catch (error) {
 			this.error = errorMessage(error);
 		} finally {
@@ -387,7 +391,9 @@ class WorkspaceStore {
 			{
 				id,
 				kind: 'query',
-				title: schema ? `Query @ ${schema}` : `Query @ ${connection?.name ?? 'database'}`,
+				title: schema
+					? t('tab.queryAt', { name: schema })
+					: t('tab.queryAt', { name: connection?.name ?? t('noun.database') }),
 				connectionId,
 				schema,
 				sql: seedSql ?? (schema ? `SELECT * FROM ${qualifyIdent(connection?.engine, schema)}` : 'SELECT 1;')
@@ -491,6 +497,11 @@ class WorkspaceStore {
 		this.tableDataEpoch[key] = (this.tableDataEpoch[key] ?? 0) + 1;
 	}
 
+	/** Invalidate open data previews after schema changes (ALTER TABLE, etc.). */
+	notifyTableChanged(connectionId: string, schema: string, objectName: string) {
+		this.bumpTableData(connectionId, schema, objectName);
+	}
+
 	refresh(connectionId: string, schema?: string, folder?: FolderKind, objectName?: string) {
 		this.closeMenu();
 		void this.refreshInBackground(connectionId, schema, folder, objectName);
@@ -512,9 +523,9 @@ class WorkspaceStore {
 				if (this.error) return;
 				if (objectName && (folder === 'tables' || folder === 'views')) {
 					this.bumpTableData(connectionId, schema, objectName);
-					this.status = `Refreshed ${objectName}`;
+					this.status = t('status.refreshedName', { name: objectName });
 				} else {
-					this.status = `Refreshed ${folderLabel(folder)}`;
+					this.status = t('status.refreshedName', { name: folderLabel(folder) });
 				}
 				return;
 			}
@@ -541,7 +552,7 @@ class WorkspaceStore {
 					}
 				};
 			}
-			this.status = 'Refreshed';
+			this.status = t('status.refreshed');
 		} catch (error) {
 			this.error = errorMessage(error);
 		} finally {
@@ -566,18 +577,7 @@ class WorkspaceStore {
 }
 
 export function folderLabel(folder: FolderKind): string {
-	switch (folder) {
-		case 'tables':
-			return 'Tables';
-		case 'views':
-			return 'Views';
-		case 'indexes':
-			return 'Indexes';
-		case 'triggers':
-			return 'Triggers';
-		case 'functions':
-			return 'Functions';
-	}
+	return t(folderMessageKey(folder));
 }
 
 export function folderToKind(folder: FolderKind): ObjectKind {

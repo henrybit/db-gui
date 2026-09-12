@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { X } from '@lucide/svelte';
+	import { t } from '$lib/i18n/i18n.svelte';
 	import { workspace } from '$lib/stores/workspace.svelte';
 </script>
 
@@ -23,7 +24,7 @@
 						event.stopPropagation();
 						workspace.closeTab(tab.id);
 					}}
-					aria-label="Close tab"
+					aria-label={t('tab.close')}
 				>
 					<X size={12} />
 				</button>

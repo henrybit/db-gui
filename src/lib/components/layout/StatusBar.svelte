@@ -2,6 +2,7 @@
 	import { workspace } from '$lib/stores/workspace.svelte';
 	import { engineLabel } from '$lib/engine';
 	import { MAX_OPEN_SESSIONS } from '$lib/sessions';
+	import { t } from '$lib/i18n/i18n.svelte';
 
 	const selected = $derived(workspace.selection);
 	const active = $derived(
@@ -14,9 +15,9 @@
 	<span>{workspace.error ?? workspace.lastMessage ?? workspace.status}</span>
 	<span>
 		{#if workspace.busy}
-			{workspace.pending.size} task(s)
+			{t('status.tasks', { count: workspace.pending.size })}
 		{:else}
-			{openCount}/{MAX_OPEN_SESSIONS} open
+			{t('status.openSessions', { open: openCount, max: MAX_OPEN_SESSIONS })}
 			{#if active}
 				· {engineLabel(active.engine)}
 			{/if}

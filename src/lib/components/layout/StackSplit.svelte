@@ -3,6 +3,8 @@
 </script>
 
 <script lang="ts">
+	import { t } from '$lib/i18n/i18n.svelte';
+
 	let {
 		top,
 		bottom,
@@ -57,7 +59,7 @@
 		onlostpointercapture={end}
 		role="separator"
 		aria-orientation="horizontal"
-		aria-label="Resize query editor"
+		aria-label={t('split.resize')}
 	></div>
 	<div class="stack-split-bottom">
 		{@render bottom()}

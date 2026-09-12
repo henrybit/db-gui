@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { workspace } from '$lib/stores/workspace.svelte';
+	import { workspace, folderLabel } from '$lib/stores/workspace.svelte';
 	import { formatBytes, formatNumber } from '$lib/format';
 	import type { FolderKind } from '$lib/api/types';
+	import { t, type MessageKey } from '$lib/i18n/i18n.svelte';
 
 	let {
 		connectionId,
@@ -18,6 +19,9 @@
 	const loading = $derived(
 		workspace.isPending(workspace.folderJobKey(connectionId, schema, folder))
 	);
+
+	const yes = $derived(t('objects.yes'));
+	const no = $derived(t('objects.no'));
 
 	const rows = $derived.by(() => {
 		const q = filter.trim().toLowerCase();
@@ -43,7 +47,7 @@
 					key: item.name,
 					cells: [
 						item.name,
-						item.updatable ? 'YES' : 'NO',
+						item.updatable ? yes : no,
 						item.securityType ?? '—',
 						item.definer ?? '—'
 					]
@@ -79,23 +83,57 @@
 					item.name,
 					item.routineType,
 					item.returns ?? '—',
-					item.deterministic ? 'YES' : 'NO',
+					item.deterministic ? yes : no,
 					item.definer ?? '—'
 				]
 			}));
 	});
 
-	const headers = $derived(
-		folder === 'tables'
-			? ['Name', 'Engine', 'Rows', 'Size', 'Comment', 'Created']
-			: folder === 'views'
-				? ['Name', 'Updatable', 'Security', 'Definer']
-				: folder === 'indexes'
-					? ['Name', 'Table', 'Kind', 'Type', 'Columns']
-					: folder === 'triggers'
-						? ['Name', 'Table', 'Timing', 'Event', 'Definer']
-						: ['Name', 'Type', 'Returns', 'Deterministic', 'Definer']
-	);
+	const headers = $derived.by((): MessageKey[] => {
+		if (folder === 'tables') {
+			return [
+				'objects.col.name',
+				'objects.col.engine',
+				'objects.col.rows',
+				'objects.col.size',
+				'objects.col.comment',
+				'objects.col.created'
+			];
+		}
+		if (folder === 'views') {
+			return [
+				'objects.col.name',
+				'objects.col.updatable',
+				'objects.col.security',
+				'objects.col.definer'
+			];
+		}
+		if (folder === 'indexes') {
+			return [
+				'objects.col.name',
+				'objects.col.table',
+				'objects.col.kind',
+				'objects.col.type',
+				'objects.col.columns'
+			];
+		}
+		if (folder === 'triggers') {
+			return [
+				'objects.col.name',
+				'objects.col.table',
+				'objects.col.timing',
+				'objects.col.event',
+				'objects.col.definer'
+			];
+		}
+		return [
+			'objects.col.name',
+			'objects.col.type',
+			'objects.col.returns',
+			'objects.col.deterministic',
+			'objects.col.definer'
+		];
+	});
 
 	function open(name: string) {
 		if (folder === 'tables') workspace.openTable(connectionId, schema, name, false);
@@ -115,16 +153,16 @@
 
 <div class="object-list">
 	<div class="filter-bar">
-		<strong style="text-transform:capitalize">{folder}</strong>
+		<strong>{folderLabel(folder)}</strong>
 		<span style="color:var(--text-muted)">{schema}</span>
-		<input placeholder="Filter objects" bind:value={filter} />
+		<input placeholder={t('objects.filter')} bind:value={filter} />
 	</div>
 	<div class="data-grid-wrap">
 		<table class="data-grid">
 			<thead>
 				<tr>
 					{#each headers as header (header)}
-						<th>{header}</th>
+						<th>{t(header)}</th>
 					{/each}
 				</tr>
 			</thead>
@@ -139,7 +177,7 @@
 			</tbody>
 		</table>
 		{#if rows.length === 0}
-			<div class="empty">{loading ? 'Loading…' : 'No objects'}</div>
+			<div class="empty">{loading ? t('objects.loading') : t('objects.empty')}</div>
 		{/if}
 	</div>
 </div>

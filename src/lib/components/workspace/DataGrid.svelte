@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { QueryResult } from '$lib/api/types';
+	import { t } from '$lib/i18n/i18n.svelte';
 	import CellDetailDrawer from './CellDetailDrawer.svelte';
 
 	const ROW_HEIGHT = 26;
@@ -46,7 +47,7 @@
 		event.stopPropagation();
 		const column = result.columns[cellIndex];
 		detail = {
-			columnName: column?.name ?? `Column ${cellIndex + 1}`,
+			columnName: column?.name ?? t('grid.columnFallback', { n: cellIndex + 1 }),
 			columnType: column?.typeName,
 			value
 		};
@@ -83,17 +84,17 @@
 				>
 					<td>{index + 1}</td>
 					{#each row as cell, cellIndex (`${index}-${cellIndex}`)}
-						<td title={cell ?? 'NULL'}>
+						<td title={cell ?? t('input.null')}>
 							{#if cell == null}
-								<span class="null-cell">(NULL)</span>
+								<span class="null-cell">{t('grid.null')}</span>
 							{:else if needsExpand(cell)}
 								<span class="cell-inner">
 									<span class="cell-text">{cell}</span>
 									<button
 										class="cell-expand"
 										type="button"
-										title="View full value"
-										aria-label="View full value"
+										title={t('grid.viewFull')}
+										aria-label={t('grid.viewFull')}
 										onclick={(event) => openDetail(event, cellIndex, cell)}
 									>
 										…
@@ -117,7 +118,7 @@
 		</tbody>
 	</table>
 	{#if result.rows.length === 0}
-		<div class="empty" style="height:120px">No rows</div>
+		<div class="empty" style="height:120px">{t('grid.noRows')}</div>
 	{/if}
 </div>
 

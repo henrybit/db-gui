@@ -3,7 +3,7 @@
 	import { api } from '$lib/api/tauri';
 	import type { CharsetCatalog } from '$lib/api/types';
 	import { workspace } from '$lib/stores/workspace.svelte';
-	import { isPostgres, schemaNoun } from '$lib/engine';
+	import { isPostgres } from '$lib/engine';
 	import Combobox from '$lib/components/layout/Combobox.svelte';
 	import {
 		FALLBACK_CHARSET_CATALOG,
@@ -11,9 +11,11 @@
 		collationOptions,
 		collationsForCharset
 	} from '$lib/mysql-charsets';
+	import { schemaNounLabel, schemaNounLower, t } from '$lib/i18n/i18n.svelte';
 
 	const prompt = $derived(workspace.createDatabasePrompt);
-	const noun = $derived(schemaNoun(prompt?.engine));
+	const noun = $derived(schemaNounLabel(prompt?.engine));
+	const nounLower = $derived(schemaNounLower(prompt?.engine));
 	const postgres = $derived(isPostgres(prompt?.engine));
 	const pending = $derived(
 		prompt ? workspace.isPending(`create-db:${prompt.connectionId}`) : false
@@ -68,18 +70,30 @@
 	<div class="modal-backdrop">
 		<div class="modal" role="dialog" aria-modal="true" aria-labelledby="create-database-title">
 			<form onsubmit={submit}>
-				<header id="create-database-title">Create {noun}</header>
+				<header id="create-database-title">{t('dialog.createNounTitle', { noun })}</header>
 				<div class="body">
 					<p>
-						Create a {noun.toLowerCase()} on “{prompt.connectionName}”{#if postgres && prompt.database}
-							in database {prompt.database}{/if}.
+						{#if postgres && prompt.database}
+							{t('dialog.createNounBodyInDb', {
+								noun: nounLower,
+								connection: prompt.connectionName,
+								database: prompt.database
+							})}
+						{:else}
+							{t('dialog.createNounBody', {
+								noun: nounLower,
+								connection: prompt.connectionName
+							})}
+						{/if}
 					</p>
 					<label class="field">
-						<span>Name</span>
+						<span>{t('dialog.name')}</span>
 						<input
 							bind:this={nameInput}
 							bind:value={name}
-							placeholder={postgres ? 'schema name' : 'database name'}
+							placeholder={postgres
+								? t('dialog.schemaNamePlaceholder')
+								: t('dialog.databaseNamePlaceholder')}
 							disabled={pending}
 							onkeydown={(event) => {
 								if (event.key === 'Escape') cancel();
@@ -88,23 +102,23 @@
 					</label>
 					{#if !postgres}
 						<div class="field">
-							<span>Charset</span>
+							<span>{t('dialog.charset')}</span>
 							<Combobox
 								bind:value={charset}
 								options={charsetOpts}
-								placeholder="search or type, optional"
+								placeholder={t('dialog.charsetSearch')}
 								disabled={pending}
 								onPick={applyCharset}
 							/>
 						</div>
 						<div class="field">
-							<span>Collation</span>
+							<span>{t('dialog.collation')}</span>
 							<Combobox
 								bind:value={collation}
 								options={collationOpts}
 								placeholder={charset.trim()
-									? 'search or type, optional'
-									: 'pick a charset first, or type'}
+									? t('dialog.charsetSearch')
+									: t('dialog.pickCharsetFirst')}
 								disabled={pending}
 							/>
 						</div>
@@ -114,9 +128,11 @@
 					{/if}
 				</div>
 				<footer>
-					<button class="btn" type="button" onclick={cancel} disabled={pending}>Cancel</button>
+					<button class="btn" type="button" onclick={cancel} disabled={pending}
+						>{t('dialog.cancel')}</button
+					>
 					<button class="btn primary" type="submit" disabled={!canSubmit}>
-						{pending ? 'Creating…' : `Create ${noun}`}
+						{pending ? t('dialog.creating') : t('dialog.createNoun', { noun })}
 					</button>
 				</footer>
 			</form>

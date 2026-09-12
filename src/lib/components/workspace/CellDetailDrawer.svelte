@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { localeTag, t } from '$lib/i18n/i18n.svelte';
 
 	let {
 		columnName,
@@ -42,7 +43,7 @@
 	}
 </script>
 
-<button class="cell-detail-backdrop" type="button" aria-label="Close cell detail" onclick={onClose}
+<button class="cell-detail-backdrop" type="button" aria-label={t('detail.closeAria')} onclick={onClose}
 ></button>
 <aside class="cell-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="cell-detail-title">
 	<header>
@@ -52,15 +53,17 @@
 				<span class="cell-detail-type" title={columnType}>{columnType}</span>
 			{/if}
 		</div>
-		<button class="btn" type="button" onclick={onClose}>Close</button>
+		<button class="btn" type="button" onclick={onClose}>{t('detail.close')}</button>
 	</header>
 	<div class="cell-detail-body">
 		<pre class="cell-detail-value">{value}</pre>
 	</div>
 	<footer>
-		<span class="cell-detail-meta">{value.length.toLocaleString()} chars</span>
+		<span class="cell-detail-meta"
+			>{t('detail.chars', { count: value.length.toLocaleString(localeTag()) })}</span
+		>
 		<button class="btn primary" type="button" onclick={copyValue}>
-			{copied ? 'Copied' : 'Copy'}
+			{copied ? t('detail.copied') : t('detail.copy')}
 		</button>
 	</footer>
 </aside>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { folderLabel, workspace } from '$lib/stores/workspace.svelte';
-	import { schemaNoun } from '$lib/engine';
+	import { t, schemaNounLabel } from '$lib/i18n/i18n.svelte';
 	import type { ContextMenuAction } from '$lib/api/types';
 
 	const menu = $derived(workspace.contextMenu);
@@ -52,53 +52,51 @@
 		workspace.closeMenu();
 	}
 
-	const labels: Record<ContextMenuAction, string> = {
-		'new-connection': 'New Connection…',
-		'edit-connection': 'Edit Connection…',
-		'delete-connection': 'Delete Connection',
-		connect: 'Connect',
-		disconnect: 'Disconnect',
-		'new-query': 'New Query',
-		'create-database': 'Create Database…',
-		refresh: 'Refresh',
-		'open-data': 'Open Table',
-		'open-structure': 'Design Table',
-		'open-ddl': 'View DDL'
-	};
-
 	function labelFor(action: ContextMenuAction): string {
 		if (action === 'create-database') {
 			const connection = workspace.connections.find((item) => item.id === menu?.connectionId);
-			return `Create ${schemaNoun(connection?.engine)}…`;
+			return t('menu.createDatabase', { noun: schemaNounLabel(connection?.engine) });
 		}
 		if (action === 'refresh') {
 			if (menu?.objectName) {
-				if (menu.objectKind === 'view') return 'Refresh View';
-				if (menu.objectKind === 'table') return 'Refresh Table';
-				return 'Refresh';
+				if (menu.objectKind === 'view') return t('menu.refreshView');
+				if (menu.objectKind === 'table') return t('menu.refreshTable');
+				return t('menu.refresh');
 			}
-			if (menu?.folder) return `Refresh ${folderLabel(menu.folder)}`;
+			if (menu?.folder) return t('menu.refreshFolder', { name: folderLabel(menu.folder) });
 			if (menu?.schema) {
 				const connection = workspace.connections.find((item) => item.id === menu.connectionId);
-				return `Refresh ${schemaNoun(connection?.engine)}`;
+				return t('menu.refreshNoun', { noun: schemaNounLabel(connection?.engine) });
 			}
-			return 'Refresh Connection';
+			return t('menu.refreshConnection');
 		}
-		return labels[action];
+		const keys: Record<ContextMenuAction, Parameters<typeof t>[0]> = {
+			'new-connection': 'menu.newConnection',
+			'edit-connection': 'menu.editConnection',
+			'delete-connection': 'menu.deleteConnection',
+			connect: 'menu.connect',
+			disconnect: 'menu.disconnect',
+			'new-query': 'menu.newQuery',
+			'create-database': 'menu.createDatabase',
+			refresh: 'menu.refresh',
+			'open-data': 'menu.openTable',
+			'open-structure': 'menu.designTable',
+			'open-ddl': 'menu.viewDdl'
+		};
+		return t(keys[action]);
 	}
 </script>
 
 {#if menu}
-	<div
-		class="context-menu"
-		style:left="{menu.x}px"
-		style:top="{menu.y}px"
-		role="menu"
-	>
+	<div class="context-menu" style:left="{menu.x}px" style:top="{menu.y}px" role="menu">
 		{#each menu.actions as action (action)}
 			<button type="button" onclick={() => run(action)}>{labelFor(action)}</button>
 		{/each}
 	</div>
-	<button class="modal-backdrop" style="background:transparent" onclick={() => workspace.closeMenu()}
-		aria-label="Close menu"></button>
+	<button
+		class="modal-backdrop"
+		style="background:transparent"
+		onclick={() => workspace.closeMenu()}
+		aria-label={t('menu.close')}
+	></button>
 {/if}

@@ -8,6 +8,7 @@
 		parseConnectionUrl
 	} from '$lib/connection-url';
 	import type { ConnectionProfile } from '$lib/api/types';
+	import { t } from '$lib/i18n/i18n.svelte';
 
 	let profile = $state<ConnectionProfile>(
 		workspace.editingConnection ?? {
@@ -26,15 +27,14 @@
 	let urlMessage = $state<string | null>(null);
 	let testing = $state(false);
 	let testMessage = $state<string | null>(null);
+	let testOk = $state(false);
 	const engine = $derived(normalizeEngine(profile.engine));
 	const urlPlaceholder = $derived(connectionUrlPlaceholder(engine));
 	const hostPlaceholder = $derived(
-		engine === 'postgres'
-			? 'host or paste postgresql://…'
-			: 'host or paste mysql://…'
+		engine === 'postgres' ? t('dialog.hostPlaceholderPostgres') : t('dialog.hostPlaceholderMysql')
 	);
 	const databaseHint = $derived(
-		engine === 'postgres' ? 'database to connect (default postgres)' : 'optional'
+		engine === 'postgres' ? t('dialog.databaseHintPostgres') : t('dialog.databaseHintMysql')
 	);
 
 	function applyEngine(next: EngineKind) {
@@ -62,7 +62,7 @@
 		const parsed = parseConnectionUrl(raw);
 		if (!parsed) {
 			if (options?.reportInvalid && looksLikeConnectionUrl(raw)) {
-				urlMessage = 'Invalid connection URL';
+				urlMessage = t('dialog.invalidUrl');
 			}
 			return false;
 		}
@@ -83,9 +83,7 @@
 			profile.name = ENGINE_PRESETS[parsed.engine].name;
 		}
 		connectionUrl = raw.trim();
-		urlMessage = options?.fromHost
-			? 'Connection URL detected and applied'
-			: 'URL applied to connection fields';
+		urlMessage = options?.fromHost ? t('dialog.urlDetected') : t('dialog.urlApplied');
 		return true;
 	}
 
@@ -112,6 +110,7 @@
 	async function test() {
 		testing = true;
 		testMessage = null;
+		testOk = false;
 		try {
 			await api.testConnection({
 				engine: profile.engine,
@@ -121,8 +120,10 @@
 				password: profile.password,
 				database: profile.database
 			});
-			testMessage = 'Connection succeeded';
+			testOk = true;
+			testMessage = t('dialog.connectionSucceeded');
 		} catch (error) {
+			testOk = false;
 			testMessage = errorMessage(error);
 		} finally {
 			testing = false;
@@ -140,10 +141,10 @@
 
 <div class="modal-backdrop">
 	<div class="modal modal-wide" role="dialog" aria-modal="true">
-		<header>{engineLabel(engine)} Connection</header>
+		<header>{t('dialog.connectionTitle', { engine: engineLabel(engine) })}</header>
 		<div class="body">
 			<label class="field">
-				<span>Engine</span>
+				<span>{t('dialog.engine')}</span>
 				<select
 					value={engine}
 					onchange={(event) => applyEngine(normalizeEngine(event.currentTarget.value))}
@@ -153,7 +154,7 @@
 				</select>
 			</label>
 			<label class="field">
-				<span>URL</span>
+				<span>{t('dialog.url')}</span>
 				<input
 					bind:value={connectionUrl}
 					placeholder={urlPlaceholder}
@@ -166,11 +167,11 @@
 				<div class="message">{urlMessage}</div>
 			{/if}
 			<label class="field">
-				<span>Name</span>
+				<span>{t('dialog.name')}</span>
 				<input bind:value={profile.name} />
 			</label>
 			<label class="field">
-				<span>Host</span>
+				<span>{t('dialog.host')}</span>
 				<input
 					bind:value={profile.host}
 					placeholder={hostPlaceholder}
@@ -179,33 +180,37 @@
 				/>
 			</label>
 			<label class="field">
-				<span>Port</span>
+				<span>{t('dialog.port')}</span>
 				<input type="number" bind:value={profile.port} />
 			</label>
 			<label class="field">
-				<span>User</span>
+				<span>{t('dialog.user')}</span>
 				<input bind:value={profile.username} />
 			</label>
 			<label class="field">
-				<span>Password</span>
+				<span>{t('dialog.password')}</span>
 				<input type="password" bind:value={profile.password} />
 			</label>
 			<label class="field">
-				<span>Database</span>
+				<span>{t('dialog.database')}</span>
 				<input bind:value={profile.database} placeholder={databaseHint} />
 			</label>
 			<label class="field">
-				<span>Save password</span>
+				<span>{t('dialog.savePassword')}</span>
 				<input type="checkbox" bind:checked={profile.savePassword} />
 			</label>
 			{#if testMessage}
-				<div class="message" class:error={!testMessage.includes('succeeded')}>{testMessage}</div>
+				<div class="message" class:error={!testOk}>{testMessage}</div>
 			{/if}
 		</div>
 		<footer>
-			<button class="btn" onclick={test} disabled={testing}>{testing ? 'Testing…' : 'Test Connection'}</button>
-			<button class="btn" onclick={() => (workspace.dialogOpen = false)}>Cancel</button>
-			<button class="btn primary" onclick={save} disabled={workspace.isPending('save-connection')}>Save</button>
+			<button class="btn" onclick={test} disabled={testing}
+				>{testing ? t('dialog.testing') : t('dialog.test')}</button
+			>
+			<button class="btn" onclick={() => (workspace.dialogOpen = false)}>{t('dialog.cancel')}</button>
+			<button class="btn primary" onclick={save} disabled={workspace.isPending('save-connection')}
+				>{t('dialog.save')}</button
+			>
 		</footer>
 	</div>
 </div>

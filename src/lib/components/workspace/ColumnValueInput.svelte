@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { ColumnInfo } from '$lib/api/types';
 	import { inputTypeForColumn, temporalKind } from '$lib/sql/column-types';
+	import { t } from '$lib/i18n/i18n.svelte';
 
 	let {
 		column,
@@ -18,9 +19,9 @@
 	const type = $derived(inputTypeForColumn(column));
 	const placeholder = $derived(
 		column.defaultValue != null
-			? `default ${column.defaultValue}`
+			? t('input.default', { value: column.defaultValue })
 			: column.nullable
-				? 'NULL'
+				? t('input.null')
 				: column.columnType
 	);
 </script>

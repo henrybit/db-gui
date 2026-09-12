@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { QueryResult } from '$lib/api/types';
+	import { t } from '$lib/i18n/i18n.svelte';
 	import CellDetailDrawer from './CellDetailDrawer.svelte';
 
 	const EXPAND_MIN_CHARS = 120;
@@ -36,7 +37,7 @@
 	function openDetail(columnIndex: number, value: string) {
 		const column = result.columns[columnIndex];
 		detail = {
-			columnName: column?.name ?? `Column ${columnIndex + 1}`,
+			columnName: column?.name ?? t('grid.columnFallback', { n: columnIndex + 1 }),
 			columnType: column?.typeName,
 			value
 		};
@@ -61,20 +62,20 @@
 	}
 </script>
 
-<div class="record-form-view" tabindex="0" onkeydown={onKey} role="region" aria-label="Form view">
+<div class="record-form-view" tabindex="0" onkeydown={onKey} role="region" aria-label={t('form.aria')}>
 	<div class="record-form-nav">
 		<button class="btn" type="button" disabled={total === 0 || safeIndex === 0} onclick={goPrev}
-			>Previous record</button
+			>{t('form.prev')}</button
 		>
 		<span class="record-form-pos">
 			{#if total === 0}
-				No records
+				{t('form.none')}
 			{:else}
-				Record {safeIndex + 1} of {total}
+				{t('form.position', { current: safeIndex + 1, total })}
 			{/if}
 		</span>
 		<button class="btn" type="button" disabled={total === 0 || safeIndex >= total - 1} onclick={goNext}
-			>Next record</button
+			>{t('form.next')}</button
 		>
 	</div>
 
@@ -95,15 +96,15 @@
 					</div>
 					<div class="record-form-value-wrap">
 						{#if cell == null}
-							<span class="null-cell">(NULL)</span>
+							<span class="null-cell">{t('grid.null')}</span>
 						{:else}
 							<pre class="record-form-value">{cell}</pre>
 							{#if needsExpand(cell)}
 								<button
 									class="cell-expand"
 									type="button"
-									title="View full value"
-									aria-label="View full value of {column.name}"
+									title={t('grid.viewFull')}
+									aria-label={t('grid.viewFullOf', { name: column.name })}
 									onclick={() => openDetail(columnIndex, cell)}
 								>
 									…
@@ -115,7 +116,7 @@
 			{/each}
 		</div>
 	{:else}
-		<div class="empty" style="height:120px">No rows</div>
+		<div class="empty" style="height:120px">{t('grid.noRows')}</div>
 	{/if}
 </div>
 

@@ -6,6 +6,7 @@
 	import { isPostgres } from '$lib/engine';
 	import { workspace } from '$lib/stores/workspace.svelte';
 	import StackSplit from '$lib/components/layout/StackSplit.svelte';
+	import { t } from '$lib/i18n/i18n.svelte';
 	import DataGrid from './DataGrid.svelte';
 
 	let {
@@ -28,9 +29,9 @@
 	const schemaHint = $derived(
 		schema
 			? isPostgres(connection?.engine)
-				? `search_path ${schema}`
-				: `USE ${schema}`
-			: 'No default schema'
+				? t('query.searchPath', { schema })
+				: t('query.useSchema', { schema })
+			: t('query.noSchema')
 	);
 
 	async function run() {
@@ -41,12 +42,18 @@
 			await afterPaint();
 			const queryResult = await api.executeSql(connectionId, text, schema);
 			const summary = queryResult.columns.length
-				? `${formatNumber(queryResult.rows.length)} row(s) in ${formatDuration(queryResult.durationMs)}`
-				: `${formatNumber(queryResult.affectedRows)} row(s) affected in ${formatDuration(queryResult.durationMs)}`;
+				? t('query.summaryRows', {
+						count: formatNumber(queryResult.rows.length),
+						duration: formatDuration(queryResult.durationMs)
+					})
+				: t('query.summaryAffected', {
+						count: formatNumber(queryResult.affectedRows),
+						duration: formatDuration(queryResult.durationMs)
+					});
 			workspace.setQueryResult(
 				tabId,
 				queryResult,
-				queryResult.truncated ? `${summary} (truncated)` : summary
+				queryResult.truncated ? t('query.summaryTruncated', { summary }) : summary
 			);
 		} catch (err) {
 			error = errorMessage(err);
@@ -66,8 +73,10 @@
 
 <div class="object-list">
 	<div class="filter-bar">
-		<button class="btn primary" onclick={run} disabled={running}>{running ? 'Running…' : 'Run'}</button>
-		<span style="color:var(--text-muted)">{schemaHint} · ⌘/Ctrl+Enter</span>
+		<button class="btn primary" onclick={run} disabled={running}
+			>{running ? t('query.running') : t('query.run')}</button
+		>
+		<span style="color:var(--text-muted)">{schemaHint} · {t('query.shortcut')}</span>
 	</div>
 	<StackSplit>
 		{#snippet top()}
@@ -80,18 +89,18 @@
 				<div class="message">
 					{result.statementKind}
 					{#if result.columns.length}
-						· {formatNumber(result.rows.length)} rows
+						· {t('query.rows', { count: formatNumber(result.rows.length) })}
 					{:else}
-						· {formatNumber(result.affectedRows)} affected
+						· {t('query.affected', { count: formatNumber(result.affectedRows) })}
 					{/if}
 					· {formatDuration(result.durationMs)}
-					{#if result.truncated}· truncated{/if}
+					{#if result.truncated}· {t('query.truncated')}{/if}
 				</div>
 				{#if result.columns.length}
 					<DataGrid {result} />
 				{/if}
 			{:else}
-				<div class="empty">Run a query to see results</div>
+				<div class="empty">{t('query.empty')}</div>
 			{/if}
 		{/snippet}
 	</StackSplit>

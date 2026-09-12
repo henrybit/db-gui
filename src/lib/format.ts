@@ -1,3 +1,5 @@
+import { localeTag } from '$lib/i18n/i18n.svelte';
+
 export function formatBytes(bytes?: number | null): string {
 	if (bytes == null) return '—';
 	if (bytes < 1024) return `${bytes} B`;
@@ -14,7 +16,7 @@ export function formatBytes(bytes?: number | null): string {
 
 export function formatNumber(value?: number | null): string {
 	if (value == null) return '—';
-	return new Intl.NumberFormat('en-US').format(value);
+	return new Intl.NumberFormat(localeTag()).format(value);
 }
 
 export function formatDuration(ms: number): string {

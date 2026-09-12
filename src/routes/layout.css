@@ -100,6 +100,43 @@ button {
 	background: var(--border);
 }
 
+.toolbar-status {
+	flex: 1;
+	min-width: 0;
+}
+
+.locale-switch {
+	display: inline-flex;
+	align-items: center;
+	flex: none;
+	margin-left: 8px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	overflow: hidden;
+	background: white;
+}
+
+.locale-switch .btn {
+	height: 26px;
+	min-width: 36px;
+	padding: 0 8px;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-size: 12px;
+}
+
+.locale-switch .btn + .btn {
+	border-left: 1px solid var(--border);
+}
+
+.locale-switch .btn.active {
+	background: #eff6ff;
+	color: var(--accent-strong);
+	font-weight: 600;
+}
+
 .workspace {
 	display: grid;
 	grid-template-columns: var(--tree-width, 280px) 5px 1fr;

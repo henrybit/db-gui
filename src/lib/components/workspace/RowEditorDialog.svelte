@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { ColumnInfo } from '$lib/api/types';
+	import { t } from '$lib/i18n/i18n.svelte';
 	import ColumnValueInput from './ColumnValueInput.svelte';
 
 	let {
@@ -62,7 +63,9 @@
 				{/if}
 			</div>
 			<footer>
-				<button class="btn" type="button" onclick={onCancel} disabled={pending}>Cancel</button>
+				<button class="btn" type="button" onclick={onCancel} disabled={pending}
+					>{t('common.cancel')}</button
+				>
 				<button class="btn primary" type="submit" disabled={pending}>
 					{pending ? pendingLabel : submitLabel}
 				</button>
