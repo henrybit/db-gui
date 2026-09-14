@@ -215,6 +215,9 @@ export const zh: Record<MessageKey, string> = {
 
 	'query.run': '运行',
 	'query.running': '运行中…',
+	'query.format': '格式化',
+	'query.formatShortcut': '⌘/Ctrl+Shift+F',
+	'query.formatFailed': '无法格式化 SQL',
 	'query.shortcut': '⌘/Ctrl+Enter',
 	'query.noSchema': '无默认模式/库',
 	'query.searchPath': 'search_path {schema}',

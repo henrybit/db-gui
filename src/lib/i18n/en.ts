@@ -218,6 +218,9 @@ export const en = {
 
 	'query.run': 'Run',
 	'query.running': 'Running…',
+	'query.format': 'Format',
+	'query.formatShortcut': '⌘/Ctrl+Shift+F',
+	'query.formatFailed': 'Could not format SQL',
 	'query.shortcut': '⌘/Ctrl+Enter',
 	'query.noSchema': 'No default schema',
 	'query.searchPath': 'search_path {schema}',

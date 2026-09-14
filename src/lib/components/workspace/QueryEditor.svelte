@@ -4,10 +4,12 @@
 	import { formatDuration, formatNumber } from '$lib/format';
 	import { afterPaint } from '$lib/runtime/jobs';
 	import { isPostgres } from '$lib/engine';
+	import { formatSql } from '$lib/sql/format';
 	import { workspace } from '$lib/stores/workspace.svelte';
 	import StackSplit from '$lib/components/layout/StackSplit.svelte';
 	import { t } from '$lib/i18n/i18n.svelte';
 	import DataGrid from './DataGrid.svelte';
+	import SqlEditor from './SqlEditor.svelte';
 
 	let {
 		tabId,
@@ -33,6 +35,18 @@
 				: t('query.useSchema', { schema })
 			: t('query.noSchema')
 	);
+
+	function format() {
+		try {
+			const next = formatSql(text, connection?.engine);
+			if (next === text) return;
+			text = next;
+			workspace.setTabSql(tabId, next);
+			workspace.lastMessage = null;
+		} catch {
+			workspace.lastMessage = t('query.formatFailed');
+		}
+	}
 
 	async function run() {
 		running = true;
@@ -62,13 +76,6 @@
 			running = false;
 		}
 	}
-
-	function onKey(event: KeyboardEvent) {
-		if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-			event.preventDefault();
-			void run();
-		}
-	}
 </script>
 
 <div class="object-list">
@@ -76,11 +83,16 @@
 		<button class="btn primary" onclick={run} disabled={running}
 			>{running ? t('query.running') : t('query.run')}</button
 		>
-		<span style="color:var(--text-muted)">{schemaHint} · {t('query.shortcut')}</span>
+		<button class="btn" onclick={format} disabled={running || !text.trim()}
+			>{t('query.format')}</button
+		>
+		<span style="color:var(--text-muted)"
+			>{schemaHint} · {t('query.shortcut')} · {t('query.formatShortcut')}</span
+		>
 	</div>
 	<StackSplit>
 		{#snippet top()}
-			<textarea class="sql-editor" bind:value={text} onkeydown={onKey} spellcheck="false"></textarea>
+			<SqlEditor bind:value={text} engine={connection?.engine} onRun={run} onFormat={format} />
 		{/snippet}
 		{#snippet bottom()}
 			{#if error}

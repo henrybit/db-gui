@@ -770,9 +770,18 @@ button {
 	border: none;
 	border-radius: 0;
 	resize: none;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
 }
 
-.stack-split-top .sql-editor:focus {
+.stack-split-top .sql-editor .cm-editor {
+	flex: 1;
+	height: 100%;
+	min-height: 0;
+}
+
+.stack-split-top .sql-editor:focus-within {
 	box-shadow: none;
 }
 
@@ -977,6 +986,15 @@ button {
 	user-select: text;
 }
 
+.sql-editor .cm-editor {
+	height: 100%;
+	background: transparent;
+}
+
+.sql-editor .cm-editor.cm-focused {
+	outline: none;
+}
+
 .ddl-view {
 	margin: 0;
 	padding: 16px;
@@ -1001,6 +1019,7 @@ button {
 .message.error {
 	color: var(--danger);
 	background: #fef2f2;
+	white-space: pre-wrap;
 }
 
 .message.success {
