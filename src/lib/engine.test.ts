@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { engineLabel, normalizeEngine, qualifyIdent, quoteIdent, schemaNoun } from './engine';
+import {
+	engineLabel,
+	normalizeEngine,
+	qualifyIdent,
+	quoteIdent,
+	quoteLiteral,
+	schemaNoun
+} from './engine';
 
 describe('engine helpers', () => {
 	it('normalizes engine aliases', () => {
@@ -16,5 +23,10 @@ describe('engine helpers', () => {
 		expect(quoteIdent('postgres', 'a"b')).toBe('"a""b"');
 		expect(qualifyIdent('postgres', 'public', 'users')).toBe('"public"."users"');
 		expect(qualifyIdent('mysql', 'shop')).toBe('`shop`.');
+	});
+
+	it('quotes SQL literals', () => {
+		expect(quoteLiteral(null)).toBe('NULL');
+		expect(quoteLiteral("O'Brien")).toBe("'O''Brien'");
 	});
 });

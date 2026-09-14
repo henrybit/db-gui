@@ -28,6 +28,11 @@ export function quoteIdent(engine: string | undefined | null, name: string): str
 	return `\`${name.replaceAll('`', '``')}\``;
 }
 
+export function quoteLiteral(value: string | null): string {
+	if (value == null) return 'NULL';
+	return `'${value.replaceAll("'", "''")}'`;
+}
+
 export function qualifyIdent(engine: string | undefined | null, schema: string, name?: string): string {
 	const prefix = quoteIdent(engine, schema);
 	return name ? `${prefix}.${quoteIdent(engine, name)}` : `${prefix}.`;

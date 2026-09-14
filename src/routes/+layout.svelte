@@ -1,6 +1,6 @@
 <script lang="ts">
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
+	import favicon from '$lib/assets/favicon.png';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 
 	let { children } = $props();
