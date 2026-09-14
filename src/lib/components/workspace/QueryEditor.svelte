@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { api, errorMessage } from '$lib/api/tauri';
+	import type { QueryLogEntry } from '$lib/api/types';
 	import { formatDuration, formatNumber } from '$lib/format';
 	import { afterPaint } from '$lib/runtime/jobs';
 	import { isPostgres } from '$lib/engine';
@@ -26,6 +27,7 @@
 	let text = $state(untrack(() => sql));
 	let running = $state(false);
 	let error = $state<string | null>(null);
+	let localLog = $state<QueryLogEntry[]>([]);
 	const result = $derived(workspace.queryResults[tabId] ?? null);
 	const connection = $derived(workspace.connections.find((item) => item.id === connectionId));
 	const schemaHint = $derived(
@@ -34,6 +36,13 @@
 				? t('query.searchPath', { schema })
 				: t('query.useSchema', { schema })
 			: t('query.noSchema')
+	);
+	const executionLog = $derived<QueryLogEntry[]>(
+		error
+			? [...localLog, { level: 'error', text: error }]
+			: result?.messages?.length
+				? result.messages
+				: localLog
 	);
 
 	function format() {
@@ -51,10 +60,12 @@
 	async function run() {
 		running = true;
 		error = null;
+		localLog = [{ level: 'info', text: t('query.log.starting') }];
 		workspace.setTabSql(tabId, text);
 		try {
 			await afterPaint();
 			const queryResult = await api.executeSql(connectionId, text, schema);
+			localLog = [];
 			const summary = queryResult.columns.length
 				? t('query.summaryRows', {
 						count: formatNumber(queryResult.rows.length),
@@ -71,6 +82,7 @@
 			);
 		} catch (err) {
 			error = errorMessage(err);
+			localLog = [...localLog, { level: 'info', text: t('query.log.failed') }];
 			workspace.setQueryResult(tabId, null, error);
 		} finally {
 			running = false;
@@ -106,13 +118,31 @@
 						· {t('query.affected', { count: formatNumber(result.affectedRows) })}
 					{/if}
 					· {formatDuration(result.durationMs)}
+					{#if result.lastInsertId != null}
+						· {t('query.insertId', { id: formatNumber(result.lastInsertId) })}
+					{/if}
 					{#if result.truncated}· {t('query.truncated')}{/if}
 				</div>
-				{#if result.columns.length}
-					<DataGrid {result} />
-				{/if}
-			{:else}
+			{:else if !running}
 				<div class="empty">{t('query.empty')}</div>
+			{/if}
+
+			{#if executionLog.length}
+				<div class="query-exec-log" aria-label={t('query.log.title')}>
+					<div class="query-exec-log-title">{t('query.log.title')}</div>
+					<ol class="query-exec-log-list">
+						{#each executionLog as entry, index (index)}
+							<li class="query-exec-log-item level-{entry.level}">
+								<span class="query-exec-log-level">{entry.level}</span>
+								<span class="query-exec-log-text">{entry.text}</span>
+							</li>
+						{/each}
+					</ol>
+				</div>
+			{/if}
+
+			{#if result?.columns.length}
+				<DataGrid {result} />
 			{/if}
 		{/snippet}
 	</StackSplit>

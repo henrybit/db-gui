@@ -461,18 +461,31 @@ impl DatabaseEngine for PostgresEngine {
             return Err(AppError::msg("SQL is empty"));
         }
 
+        let mut messages = Vec::new();
         let client = self.pool.get().await?;
         Self::set_search_path(&client, schema).await?;
+        if let Some(schema) = schema {
+            messages.push(crate::models::QueryLogEntry::info(format!(
+                "SET search_path TO {schema}, pg_catalog"
+            )));
+        }
+
+        messages.push(crate::models::QueryLogEntry::info(format!(
+            "Executing {}…",
+            statement_kind(sql)
+        )));
+
         let started = Instant::now();
         let result = client.simple_query(sql).await;
         if schema.is_some() {
             let _ = client.simple_query("RESET search_path").await;
         }
-        let messages = result?;
+        let query_messages = result?;
         Ok(simple_query_result(
-            messages,
+            query_messages,
             sql,
             started.elapsed().as_millis() as u64,
+            messages,
         ))
     }
 
@@ -509,6 +522,7 @@ fn simple_query_result(
     messages: Vec<SimpleQueryMessage>,
     sql: &str,
     duration_ms: u64,
+    mut log: Vec<crate::models::QueryLogEntry>,
 ) -> QueryResult {
     let mut columns = Vec::new();
     let mut rows = Vec::new();
@@ -516,6 +530,7 @@ fn simple_query_result(
     let mut current_rows = Vec::new();
     let mut affected_rows = 0_u64;
     let mut truncated = false;
+    let mut statement_index = 0_u32;
 
     for message in messages {
         match message {
@@ -541,10 +556,20 @@ fn simple_query_result(
                 }
             }
             SimpleQueryMessage::CommandComplete(count) => {
+                statement_index += 1;
                 affected_rows = count;
                 if !current_columns.is_empty() {
+                    let row_count = current_rows.len();
+                    let col_count = current_columns.len();
                     columns = std::mem::take(&mut current_columns);
                     rows = std::mem::take(&mut current_rows);
+                    log.push(crate::models::QueryLogEntry::success(format!(
+                        "Statement #{statement_index}: OK, {col_count} column(s), {row_count} row(s) returned"
+                    )));
+                } else {
+                    log.push(crate::models::QueryLogEntry::success(format!(
+                        "Statement #{statement_index}: OK, {count} row(s) affected"
+                    )));
                 }
             }
             _ => {}
@@ -556,6 +581,18 @@ fn simple_query_result(
         rows = current_rows;
     }
 
+    if truncated {
+        log.push(crate::models::QueryLogEntry::warning(format!(
+            "Result truncated to {MAX_RESULT_ROWS} rows"
+        )));
+    }
+    if statement_index == 0 && columns.is_empty() {
+        log.push(crate::models::QueryLogEntry::success("OK".to_string()));
+    }
+    log.push(crate::models::QueryLogEntry::info(format!(
+        "Finished in {duration_ms} ms"
+    )));
+
     QueryResult {
         columns,
         rows,
@@ -564,6 +601,7 @@ fn simple_query_result(
         duration_ms,
         truncated,
         statement_kind: statement_kind(sql).to_string(),
+        messages: log,
     }
 }
 

@@ -130,6 +130,13 @@ export interface ColumnMeta {
 	typeName: string;
 }
 
+export type QueryLogLevel = 'info' | 'success' | 'notice' | 'warning' | 'error';
+
+export interface QueryLogEntry {
+	level: QueryLogLevel;
+	text: string;
+}
+
 export interface QueryResult {
 	columns: ColumnMeta[];
 	rows: Array<Array<string | null>>;
@@ -138,6 +145,7 @@ export interface QueryResult {
 	durationMs: number;
 	truncated: boolean;
 	statementKind: string;
+	messages?: QueryLogEntry[];
 }
 
 export type TabKind = 'objects' | 'table' | 'view' | 'ddl' | 'query';

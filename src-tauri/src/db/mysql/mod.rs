@@ -425,16 +425,25 @@ impl DatabaseEngine for MySqlEngine {
             return Err(AppError::msg("SQL is empty"));
         }
 
+        let mut messages = Vec::new();
         let mut conn = self.conn().await?;
         if let Some(schema) = schema {
             validate_ident(schema)?;
             conn.query_drop(format!("USE {}", quote_ident(schema)))
                 .await?;
+            messages.push(crate::models::QueryLogEntry::info(format!(
+                "USE {schema}"
+            )));
         }
+
+        messages.push(crate::models::QueryLogEntry::info(format!(
+            "Executing {}…",
+            statement_kind(sql)
+        )));
 
         let started = Instant::now();
         let mut result = conn.query_iter(sql).await?;
-        let columns = result
+        let columns: Vec<crate::models::ColumnMeta> = result
             .columns_ref()
             .iter()
             .map(|column| crate::models::ColumnMeta {
@@ -455,7 +464,48 @@ impl DatabaseEngine for MySqlEngine {
 
         let affected_rows = result.affected_rows();
         let last_insert_id = result.last_insert_id();
+        let info = result.info().trim().to_string();
+        let warning_count = result.warnings();
         let duration_ms = started.elapsed().as_millis() as u64;
+
+        if columns.is_empty() {
+            messages.push(crate::models::QueryLogEntry::success(format!(
+                "OK, {affected_rows} row(s) affected"
+            )));
+        } else {
+            messages.push(crate::models::QueryLogEntry::success(format!(
+                "OK, {} column(s), {} row(s) returned",
+                columns.len(),
+                rows.len()
+            )));
+        }
+        if !info.is_empty() {
+            messages.push(crate::models::QueryLogEntry::notice(info));
+        }
+        if let Some(id) = last_insert_id {
+            messages.push(crate::models::QueryLogEntry::info(format!(
+                "Last insert id: {id}"
+            )));
+        }
+        if truncated {
+            messages.push(crate::models::QueryLogEntry::warning(format!(
+                "Result truncated to {MAX_RESULT_ROWS} rows"
+            )));
+        }
+        if warning_count > 0 {
+            messages.push(crate::models::QueryLogEntry::warning(format!(
+                "{warning_count} warning(s)"
+            )));
+            // Consume remaining result sets before issuing SHOW WARNINGS.
+            let _ = result.drop_result().await;
+            append_mysql_warnings(&mut conn, &mut messages).await?;
+        } else {
+            let _ = result.drop_result().await;
+        }
+
+        messages.push(crate::models::QueryLogEntry::info(format!(
+            "Finished in {duration_ms} ms"
+        )));
 
         Ok(QueryResult {
             columns,
@@ -465,6 +515,7 @@ impl DatabaseEngine for MySqlEngine {
             duration_ms,
             truncated,
             statement_kind: statement_kind(sql).to_string(),
+            messages,
         })
     }
 
@@ -534,4 +585,25 @@ fn extract_ddl(row: &Row) -> AppResult<String> {
         }
     }
     Err(AppError::msg("unable to read CREATE statement"))
+}
+
+async fn append_mysql_warnings(
+    conn: &mut Conn,
+    messages: &mut Vec<crate::models::QueryLogEntry>,
+) -> AppResult<()> {
+    let warnings: Vec<(String, u16, String)> = conn
+        .query_map("SHOW WARNINGS", |row: (String, u16, String)| row)
+        .await
+        .unwrap_or_default();
+    for (level, code, text) in warnings.into_iter().take(20) {
+        let entry = format!("[{level}] ({code}) {text}");
+        if level.eq_ignore_ascii_case("Error") {
+            messages.push(crate::models::QueryLogEntry::error(entry));
+        } else if level.eq_ignore_ascii_case("Note") {
+            messages.push(crate::models::QueryLogEntry::notice(entry));
+        } else {
+            messages.push(crate::models::QueryLogEntry::warning(entry));
+        }
+    }
+    Ok(())
 }
