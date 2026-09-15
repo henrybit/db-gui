@@ -30,6 +30,15 @@
 			case 'create-database':
 				if (connectionId) workspace.askCreateDatabase(connectionId);
 				break;
+			case 'delete-database':
+				if (connectionId && schema) workspace.askDropDatabase(connectionId, schema);
+				break;
+			case 'dump-database':
+				if (connectionId && schema) workspace.askDumpDatabase(connectionId, schema);
+				break;
+			case 'run-sql-file':
+				if (connectionId && schema) void workspace.runSqlFile(connectionId, schema);
+				break;
 			case 'refresh':
 				if (connectionId) void workspace.refresh(connectionId, schema, folder, objectName);
 				break;
@@ -53,9 +62,12 @@
 	}
 
 	function labelFor(action: ContextMenuAction): string {
-		if (action === 'create-database') {
+		if (action === 'create-database' || action === 'delete-database' || action === 'dump-database') {
 			const connection = workspace.connections.find((item) => item.id === menu?.connectionId);
-			return t('menu.createDatabase', { noun: schemaNounLabel(connection?.engine) });
+			const noun = schemaNounLabel(connection?.engine);
+			if (action === 'create-database') return t('menu.createDatabase', { noun });
+			if (action === 'delete-database') return t('menu.deleteDatabase', { noun });
+			return t('menu.dumpDatabase', { noun });
 		}
 		if (action === 'refresh') {
 			if (menu?.objectName) {
@@ -78,6 +90,9 @@
 			disconnect: 'menu.disconnect',
 			'new-query': 'menu.newQuery',
 			'create-database': 'menu.createDatabase',
+			'delete-database': 'menu.deleteDatabase',
+			'dump-database': 'menu.dumpDatabase',
+			'run-sql-file': 'menu.runSqlFile',
 			refresh: 'menu.refresh',
 			'open-data': 'menu.openTable',
 			'open-structure': 'menu.designTable',

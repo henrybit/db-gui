@@ -57,6 +57,12 @@ export const api = {
 			collation: collation?.trim() ? collation.trim() : null
 		}),
 
+	dropDatabase: (connectionId: string, name: string) =>
+		call<void>('drop_database', { connectionId, name }),
+
+	dumpDatabase: (connectionId: string, name: string, includeData = true) =>
+		call<string>('dump_database', { connectionId, name, includeData }),
+
 	listCharsetCatalog: (connectionId: string) =>
 		call<CharsetCatalog>('list_charset_catalog', { connectionId }),
 

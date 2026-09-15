@@ -26,13 +26,15 @@
 		engine = null,
 		placeholderText = '',
 		onRun,
-		onFormat
+		onFormat,
+		onExplain
 	}: {
 		value?: string;
 		engine?: string | null;
 		placeholderText?: string;
 		onRun?: () => void;
 		onFormat?: () => void;
+		onExplain?: () => void;
 	} = $props();
 
 	let host = $state<HTMLDivElement | undefined>();
@@ -40,10 +42,12 @@
 	const dialectCompartment = new Compartment();
 	let runCallback: (() => void) | undefined;
 	let formatCallback: (() => void) | undefined;
+	let explainCallback: (() => void) | undefined;
 
 	$effect.pre(() => {
 		runCallback = onRun;
 		formatCallback = onFormat;
+		explainCallback = onExplain;
 	});
 
 	function languageExtension(engineValue: string | null | undefined) {
@@ -90,6 +94,13 @@
 							key: 'Mod-Shift-f',
 							run: () => {
 								formatCallback?.();
+								return true;
+							}
+						},
+						{
+							key: 'Mod-Shift-e',
+							run: () => {
+								explainCallback?.();
 								return true;
 							}
 						}

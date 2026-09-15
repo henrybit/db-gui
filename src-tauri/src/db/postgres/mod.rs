@@ -1,7 +1,9 @@
 use super::engine::DatabaseEngine;
 use super::ident::{
-    create_pg_schema_sql, qualify_pg as qualify, quote_ident_pg as quote_ident, validate_ident,
+    create_pg_schema_sql, drop_pg_schema_sql, qualify_pg as qualify, quote_ident_pg as quote_ident,
+    validate_ident,
 };
+use super::dump::{build_dump, DumpDialect};
 use super::sql::statement_kind;
 use crate::error::{AppError, AppResult};
 use crate::models::{
@@ -117,6 +119,31 @@ impl DatabaseEngine for PostgresEngine {
         let client = self.pool.get().await?;
         client.simple_query(&sql).await?;
         Ok(())
+    }
+
+    async fn drop_database(&self, name: &str) -> AppResult<()> {
+        let name = name.trim();
+        validate_ident(name)?;
+        if SYSTEM_SCHEMAS
+            .iter()
+            .any(|item| item.eq_ignore_ascii_case(name))
+            || name.eq_ignore_ascii_case("public")
+            || name.starts_with("pg_")
+        {
+            return Err(AppError::msg(format!(
+                "cannot drop system schema: {name}"
+            )));
+        }
+        let sql = drop_pg_schema_sql(name)?;
+        let client = self.pool.get().await?;
+        client.simple_query(&sql).await?;
+        Ok(())
+    }
+
+    async fn dump_database(&self, name: &str, include_data: bool) -> AppResult<String> {
+        let name = name.trim();
+        validate_ident(name)?;
+        build_dump(self, name, include_data, DumpDialect::Postgres).await
     }
 
     async fn list_charset_catalog(&self) -> AppResult<CharsetCatalog> {

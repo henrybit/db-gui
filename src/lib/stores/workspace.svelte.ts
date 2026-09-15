@@ -11,6 +11,8 @@ import type {
 	ContextMenuState,
 	CreateDatabasePrompt,
 	DatabaseInfo,
+	DropDatabasePrompt,
+	DumpDatabasePrompt,
 	FolderKind,
 	IndexInfo,
 	ObjectKind,
@@ -51,6 +53,8 @@ class WorkspaceStore {
 	passwordPrompt = $state<{ id: string; name: string } | null>(null);
 	confirmDelete = $state<{ id: string; name: string } | null>(null);
 	createDatabasePrompt = $state<CreateDatabasePrompt | null>(null);
+	dropDatabasePrompt = $state<DropDatabasePrompt | null>(null);
+	dumpDatabasePrompt = $state<DumpDatabasePrompt | null>(null);
 	contextMenu = $state<ContextMenuState | null>(null);
 	queryResults = $state<Record<string, QueryResult | null>>({});
 	lastMessage = $state<string | null>(null);
@@ -198,6 +202,105 @@ class WorkspaceStore {
 			this.status = t('status.created', {
 				noun: schemaNounLabel(prompt.engine),
 				name: created
+			});
+		} catch (error) {
+			this.error = errorMessage(error);
+		} finally {
+			this.end(key);
+		}
+	}
+
+	askDropDatabase(connectionId: string, schema: string) {
+		const item = this.connections.find((c) => c.id === connectionId);
+		const database = this.schema[connectionId]?.databases.find((entry) => entry.name === schema);
+		if (!item?.connected || !database || database.isSystem) return;
+		this.error = null;
+		this.dropDatabasePrompt = {
+			connectionId: item.id,
+			connectionName: item.name,
+			engine: item.engine,
+			name: database.name
+		};
+		this.closeMenu();
+	}
+
+	async confirmDropDatabase() {
+		if (!this.dropDatabasePrompt) return;
+		const prompt = this.dropDatabasePrompt;
+		const key = `drop-db:${prompt.connectionId}:${prompt.name}`;
+		this.begin(key);
+		this.error = null;
+		try {
+			await api.dropDatabase(prompt.connectionId, prompt.name);
+			this.dropDatabasePrompt = null;
+			const remaining = this.tabs.filter(
+				(tab) => !(tab.connectionId === prompt.connectionId && tab.schema === prompt.name)
+			);
+			const activeStillOpen = remaining.some((tab) => tab.id === this.activeTabId);
+			this.tabs = remaining;
+			if (!activeStillOpen) {
+				this.activeTabId = remaining[remaining.length - 1]?.id ?? null;
+			}
+			if (this.selection?.connectionId === prompt.connectionId && this.selection.schema === prompt.name) {
+				this.selection = { connectionId: prompt.connectionId };
+			}
+			this.expanded = new Set(
+				[...this.expanded].filter(
+					(key) =>
+						key !== `db:${prompt.connectionId}:${prompt.name}` &&
+						!key.startsWith(`folder:${prompt.connectionId}:${prompt.name}:`)
+				)
+			);
+			const cache = this.schema[prompt.connectionId];
+			if (cache) {
+				const next = { ...cache };
+				next.databases = next.databases.filter((item) => item.name !== prompt.name);
+				delete next.tables[prompt.name];
+				delete next.views[prompt.name];
+				delete next.indexes[prompt.name];
+				delete next.triggers[prompt.name];
+				delete next.routines[prompt.name];
+				this.schema = { ...this.schema, [prompt.connectionId]: next };
+			}
+			await this.loadDatabases(prompt.connectionId);
+			this.status = t('status.dropped', {
+				noun: schemaNounLabel(prompt.engine),
+				name: prompt.name
+			});
+		} catch (error) {
+			this.error = errorMessage(error);
+		} finally {
+			this.end(key);
+		}
+	}
+
+	askDumpDatabase(connectionId: string, schema: string) {
+		const item = this.connections.find((c) => c.id === connectionId);
+		if (!item?.connected || !schema) return;
+		this.error = null;
+		this.dumpDatabasePrompt = {
+			connectionId: item.id,
+			connectionName: item.name,
+			engine: item.engine,
+			name: schema
+		};
+		this.closeMenu();
+	}
+
+	async confirmDumpDatabase(includeData: boolean) {
+		if (!this.dumpDatabasePrompt) return;
+		const prompt = this.dumpDatabasePrompt;
+		const key = `dump-db:${prompt.connectionId}:${prompt.name}`;
+		this.begin(key);
+		this.error = null;
+		try {
+			const sql = await api.dumpDatabase(prompt.connectionId, prompt.name, includeData);
+			const { downloadTextFile } = await import('$lib/download');
+			downloadTextFile(`${prompt.name}.sql`, sql);
+			this.dumpDatabasePrompt = null;
+			this.status = t('status.dumped', {
+				noun: schemaNounLabel(prompt.engine),
+				name: prompt.name
 			});
 		} catch (error) {
 			this.error = errorMessage(error);
@@ -383,7 +486,12 @@ class WorkspaceStore {
 		this.closeMenu();
 	}
 
-	openQuery(connectionId: string, schema?: string, seedSql?: string) {
+	openQuery(
+		connectionId: string,
+		schema?: string,
+		seedSql?: string,
+		options?: { title?: string; autoRun?: boolean }
+	) {
 		const id = uid('query');
 		const connection = this.connections.find((item) => item.id === connectionId);
 		this.tabs = [
@@ -391,16 +499,49 @@ class WorkspaceStore {
 			{
 				id,
 				kind: 'query',
-				title: schema
-					? t('tab.queryAt', { name: schema })
-					: t('tab.queryAt', { name: connection?.name ?? t('noun.database') }),
+				title:
+					options?.title ??
+					(schema
+						? t('tab.queryAt', { name: schema })
+						: t('tab.queryAt', { name: connection?.name ?? t('noun.database') })),
 				connectionId,
 				schema,
-				sql: seedSql ?? (schema ? `SELECT * FROM ${qualifyIdent(connection?.engine, schema)}` : 'SELECT 1;')
+				sql:
+					seedSql ??
+					(schema ? `SELECT * FROM ${qualifyIdent(connection?.engine, schema)}` : 'SELECT 1;'),
+				autoRun: options?.autoRun === true
 			}
 		];
 		this.activeTabId = id;
 		this.closeMenu();
+	}
+
+	clearTabAutoRun(id: string) {
+		this.tabs = this.tabs.map((tab) => (tab.id === id ? { ...tab, autoRun: false } : tab));
+	}
+
+	async runSqlFile(connectionId: string, schema: string) {
+		const item = this.connections.find((c) => c.id === connectionId);
+		if (!item?.connected || !schema) return;
+		this.closeMenu();
+		this.error = null;
+		try {
+			const { pickSqlFile } = await import('$lib/pick-sql-file');
+			const file = await pickSqlFile();
+			if (!file) return;
+			const sql = file.content.trim();
+			if (!sql) {
+				this.error = t('query.sqlFileEmpty');
+				return;
+			}
+			this.openQuery(connectionId, schema, file.content, {
+				title: t('tab.sqlFileAt', { file: file.name, name: schema }),
+				autoRun: true
+			});
+			this.status = t('status.sqlFileLoaded', { file: file.name, name: schema });
+		} catch (error) {
+			this.error = errorMessage(error);
+		}
 	}
 
 	closeTab(id: string) {

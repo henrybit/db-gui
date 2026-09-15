@@ -32,5 +32,11 @@
 		kind={tab.objectKind}
 	/>
 {:else if tab.kind === 'query'}
-	<QueryEditor tabId={tab.id} connectionId={tab.connectionId} schema={tab.schema} sql={tab.sql ?? ''} />
+	<QueryEditor
+		tabId={tab.id}
+		connectionId={tab.connectionId}
+		schema={tab.schema}
+		sql={tab.sql ?? ''}
+		autoRun={tab.autoRun === true}
+	/>
 {/if}

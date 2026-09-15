@@ -10,6 +10,8 @@ commands.allow = [
   "disconnect_session",
   "list_databases",
   "create_database",
+  "drop_database",
+  "dump_database",
   "list_charset_catalog",
   "list_tables",
   "list_views",

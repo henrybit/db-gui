@@ -555,6 +555,11 @@ button {
 	color: var(--text-muted);
 }
 
+.modal .body .hint {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
 .field {
 	display: grid;
 	grid-template-columns: 110px 1fr;

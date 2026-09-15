@@ -56,6 +56,18 @@ pub fn create_pg_schema_sql(name: &str) -> AppResult<String> {
     Ok(format!("CREATE SCHEMA {}", quote_ident_pg(name)))
 }
 
+pub fn drop_mysql_database_sql(name: &str) -> AppResult<String> {
+    let name = name.trim();
+    validate_ident(name)?;
+    Ok(format!("DROP DATABASE {}", quote_ident(name)))
+}
+
+pub fn drop_pg_schema_sql(name: &str) -> AppResult<String> {
+    let name = name.trim();
+    validate_ident(name)?;
+    Ok(format!("DROP SCHEMA {} CASCADE", quote_ident_pg(name)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,5 +118,19 @@ mod tests {
             "CREATE SCHEMA \"a\"\"b\""
         );
         assert!(create_pg_schema_sql("").is_err());
+    }
+
+    #[test]
+    fn builds_drop_sql() {
+        assert_eq!(
+            drop_mysql_database_sql("shop").unwrap(),
+            "DROP DATABASE `shop`"
+        );
+        assert_eq!(
+            drop_pg_schema_sql("analytics").unwrap(),
+            "DROP SCHEMA \"analytics\" CASCADE"
+        );
+        assert!(drop_mysql_database_sql("").is_err());
+        assert!(drop_pg_schema_sql("").is_err());
     }
 }

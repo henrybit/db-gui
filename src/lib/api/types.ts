@@ -160,6 +160,7 @@ export interface Tab {
 	objectKind?: ObjectKind;
 	folder?: FolderKind;
 	sql?: string;
+	autoRun?: boolean;
 }
 
 export interface TreeSelection {
@@ -178,6 +179,9 @@ export type ContextMenuAction =
 	| 'disconnect'
 	| 'new-query'
 	| 'create-database'
+	| 'delete-database'
+	| 'dump-database'
+	| 'run-sql-file'
 	| 'refresh'
 	| 'open-data'
 	| 'open-structure'
@@ -188,6 +192,20 @@ export interface CreateDatabasePrompt {
 	connectionName: string;
 	engine: string;
 	database?: string | null;
+}
+
+export interface DropDatabasePrompt {
+	connectionId: string;
+	connectionName: string;
+	engine: string;
+	name: string;
+}
+
+export interface DumpDatabasePrompt {
+	connectionId: string;
+	connectionName: string;
+	engine: string;
+	name: string;
 }
 
 export interface ContextMenuState {

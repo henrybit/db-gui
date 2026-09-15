@@ -1,3 +1,4 @@
+pub mod dump;
 pub mod engine;
 pub mod ident;
 pub mod mysql;

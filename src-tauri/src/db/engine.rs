@@ -17,6 +17,8 @@ pub trait DatabaseEngine: Send + Sync {
         charset: Option<&str>,
         collation: Option<&str>,
     ) -> AppResult<()>;
+    async fn drop_database(&self, name: &str) -> AppResult<()>;
+    async fn dump_database(&self, name: &str, include_data: bool) -> AppResult<String>;
     async fn list_charset_catalog(&self) -> AppResult<CharsetCatalog>;
     async fn list_tables(&self, schema: &str) -> AppResult<Vec<TableInfo>>;
     async fn list_views(&self, schema: &str) -> AppResult<Vec<ViewInfo>>;
@@ -85,6 +87,14 @@ impl DatabaseEngine for LiveEngine {
         collation: Option<&str>,
     ) -> AppResult<()> {
         dispatch_engine!(self, create_database, name, charset, collation)
+    }
+
+    async fn drop_database(&self, name: &str) -> AppResult<()> {
+        dispatch_engine!(self, drop_database, name)
+    }
+
+    async fn dump_database(&self, name: &str, include_data: bool) -> AppResult<String> {
+        dispatch_engine!(self, dump_database, name, include_data)
     }
 
     async fn list_charset_catalog(&self) -> AppResult<CharsetCatalog> {

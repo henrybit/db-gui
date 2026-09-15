@@ -36,6 +36,31 @@ pub async fn create_database(
 }
 
 #[tauri::command]
+pub async fn drop_database(
+    state: State<'_, AppState>,
+    connection_id: String,
+    name: String,
+) -> AppResult<()> {
+    with_engine(&state, connection_id, move |engine| async move {
+        engine.drop_database(&name).await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn dump_database(
+    state: State<'_, AppState>,
+    connection_id: String,
+    name: String,
+    include_data: bool,
+) -> AppResult<String> {
+    with_engine(&state, connection_id, move |engine| async move {
+        engine.dump_database(&name, include_data).await
+    })
+    .await
+}
+
+#[tauri::command]
 pub async fn list_charset_catalog(
     state: State<'_, AppState>,
     connection_id: String,

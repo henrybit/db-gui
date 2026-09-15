@@ -134,7 +134,16 @@
 						workspace.openMenu(event, {
 							connectionId: connection.id,
 							schema: database.name,
-							actions: ['new-query', 'create-database', 'refresh']
+							actions: database.isSystem
+								? ['new-query', 'run-sql-file', 'create-database', 'dump-database', 'refresh']
+								: [
+										'new-query',
+										'run-sql-file',
+										'create-database',
+										'dump-database',
+										'delete-database',
+										'refresh'
+									]
 						})}
 					role="button"
 					tabindex="0"

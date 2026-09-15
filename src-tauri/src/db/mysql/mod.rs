@@ -1,7 +1,8 @@
 mod values;
 
 use super::engine::DatabaseEngine;
-use super::ident::{create_mysql_database_sql, qualify, quote_ident, validate_ident};
+use super::ident::{create_mysql_database_sql, drop_mysql_database_sql, qualify, quote_ident, validate_ident};
+use super::dump::{build_dump, DumpDialect};
 use crate::error::{AppError, AppResult};
 use crate::models::{
     CharsetCatalog, CharsetInfo, CollationInfo, ColumnInfo, ConnectionProfile, DatabaseInfo,
@@ -83,6 +84,26 @@ impl DatabaseEngine for MySqlEngine {
         let mut conn = self.conn().await?;
         conn.query_drop(sql).await?;
         Ok(())
+    }
+
+    async fn drop_database(&self, name: &str) -> AppResult<()> {
+        let name = name.trim();
+        validate_ident(name)?;
+        if SYSTEM_SCHEMAS.iter().any(|item| item.eq_ignore_ascii_case(name)) {
+            return Err(AppError::msg(format!(
+                "cannot drop system database: {name}"
+            )));
+        }
+        let sql = drop_mysql_database_sql(name)?;
+        let mut conn = self.conn().await?;
+        conn.query_drop(sql).await?;
+        Ok(())
+    }
+
+    async fn dump_database(&self, name: &str, include_data: bool) -> AppResult<String> {
+        let name = name.trim();
+        validate_ident(name)?;
+        build_dump(self, name, include_data, DumpDialect::Mysql).await
     }
 
     async fn list_charset_catalog(&self) -> AppResult<CharsetCatalog> {
