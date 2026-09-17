@@ -163,6 +163,7 @@ export interface Tab {
 	objectKind?: ObjectKind;
 	folder?: FolderKind;
 	sql?: string;
+	sqlCached?: boolean;
 	autoRun?: boolean;
 }
 

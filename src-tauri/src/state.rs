@@ -17,6 +17,7 @@ struct StoredProfiles {
 
 pub struct AppState {
     data_file: PathBuf,
+    query_cache_dir: PathBuf,
     profiles: RwLock<Vec<ConnectionProfile>>,
     sessions: DashMap<String, LiveEngine>,
     session_order: Mutex<Vec<String>>,
@@ -27,6 +28,8 @@ impl AppState {
     pub fn load(data_dir: PathBuf) -> AppResult<Self> {
         std::fs::create_dir_all(&data_dir)?;
         let data_file = data_dir.join("connections.json");
+        let query_cache_dir = data_dir.join("query-cache");
+        reset_query_cache_dir(&query_cache_dir)?;
         let profiles = if data_file.exists() {
             let raw = std::fs::read_to_string(&data_file)?;
             serde_json::from_str::<StoredProfiles>(&raw)?.connections
@@ -36,6 +39,7 @@ impl AppState {
 
         Ok(Self {
             data_file,
+            query_cache_dir,
             profiles: RwLock::new(profiles),
             sessions: DashMap::new(),
             session_order: Mutex::new(Vec::new()),
@@ -186,6 +190,10 @@ impl AppState {
             .ok_or_else(|| AppError::NotConnected(id.to_string()))
     }
 
+    pub fn query_cache_dir(&self) -> &PathBuf {
+        &self.query_cache_dir
+    }
+
     async fn persist(&self) -> AppResult<()> {
         let profiles = self.profiles.read().await;
         let stored = StoredProfiles {
@@ -200,6 +208,14 @@ impl AppState {
         })
         .await
     }
+}
+
+fn reset_query_cache_dir(dir: &PathBuf) -> AppResult<()> {
+    if dir.exists() {
+        std::fs::remove_dir_all(dir)?;
+    }
+    std::fs::create_dir_all(dir)?;
+    Ok(())
 }
 
 fn ids_to_evict(open_order: &[String], connecting_id: &str, max: usize) -> Vec<String> {

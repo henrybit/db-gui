@@ -238,6 +238,7 @@ export const zh: Record<MessageKey, string> = {
 	'query.explainShortcut': '⌘/Ctrl+Shift+E',
 	'query.formatFailed': '无法格式化 SQL',
 	'query.sqlFileEmpty': 'SQL 文件为空',
+	'query.loadingSql': '正在加载 SQL…',
 	'query.shortcut': '⌘/Ctrl+Enter',
 	'query.noSchema': '无默认模式/库',
 	'query.searchPath': 'search_path {schema}',

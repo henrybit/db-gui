@@ -1,7 +1,9 @@
+pub mod cache;
 pub mod connection;
 pub mod query;
 pub mod schema;
 
+pub use cache::*;
 pub use connection::*;
 pub use query::*;
 pub use schema::*;

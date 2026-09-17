@@ -732,9 +732,22 @@ button {
 	place-items: center;
 	height: 100%;
 	color: var(--text-muted);
-	background:
-		radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 32%),
-		white;
+	background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 32%), white;
+}
+
+.query-tab-keep {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	height: 100%;
+}
+
+.query-tab-keep[hidden] {
+	display: none !important;
+}
+
+.query-tab-keep > .object-list {
+	flex: 1;
 }
 
 .object-list {

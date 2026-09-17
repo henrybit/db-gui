@@ -74,6 +74,13 @@ export const api = {
 	writeTextFile: (path: string, contents: string) =>
 		call<string>('write_text_file', { path, contents }),
 
+	writeQueryCache: (tabId: string, contents: string) =>
+		call<void>('write_query_cache', { tabId, contents }),
+
+	readQueryCache: (tabId: string) => call<string>('read_query_cache', { tabId }),
+
+	deleteQueryCache: (tabId: string) => call<void>('delete_query_cache', { tabId }),
+
 	listCharsetCatalog: (connectionId: string) =>
 		call<CharsetCatalog>('list_charset_catalog', { connectionId }),
 

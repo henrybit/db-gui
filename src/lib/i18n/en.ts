@@ -241,6 +241,7 @@ export const en = {
 	'query.explainShortcut': '⌘/Ctrl+Shift+E',
 	'query.formatFailed': 'Could not format SQL',
 	'query.sqlFileEmpty': 'SQL file is empty',
+	'query.loadingSql': 'Loading SQL…',
 	'query.shortcut': '⌘/Ctrl+Enter',
 	'query.noSchema': 'No default schema',
 	'query.searchPath': 'search_path {schema}',

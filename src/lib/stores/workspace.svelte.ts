@@ -3,6 +3,12 @@ import { qualifyIdent } from '$lib/engine';
 import { uid } from '$lib/format';
 import { folderMessageKey, schemaNounLabel, t } from '$lib/i18n/i18n.svelte';
 import { afterPaint, runExclusive } from '$lib/runtime/jobs';
+import {
+	deleteQuerySqlCache,
+	exceedsQuerySqlMemoryLimit,
+	readQuerySqlCache,
+	writeQuerySqlCache
+} from '$lib/query-sql-cache';
 import { pickSqlSavePath, sqlDumpFileName, writeSqlFile } from '$lib/save-sql-file';
 import { connectStatus, forgetExpandedKeys } from '$lib/sessions';
 import type {
@@ -58,6 +64,9 @@ class WorkspaceStore {
 	queryResults = $state<Record<string, QueryResult | null>>({});
 	lastMessage = $state<string | null>(null);
 	tableDataEpoch = $state<Record<string, number>>({});
+	private sqlWriteTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	private sqlWriteEpoch = new Map<string, number>();
+	private pendingSqlWrites = new Map<string, string>();
 
 	get activeTab(): Tab | null {
 		return this.tabs.find((tab) => tab.id === this.activeTabId) ?? null;
@@ -505,7 +514,7 @@ class WorkspaceStore {
 		this.closeMenu();
 	}
 
-	openQuery(
+	async openQuery(
 		connectionId: string,
 		schema?: string,
 		seedSql?: string,
@@ -513,6 +522,18 @@ class WorkspaceStore {
 	) {
 		const id = uid('query');
 		const connection = this.connections.find((item) => item.id === connectionId);
+		const sql =
+			seedSql ??
+			(schema ? `SELECT * FROM ${qualifyIdent(connection?.engine, schema)}` : 'SELECT 1;');
+		const sqlCached = exceedsQuerySqlMemoryLimit(sql);
+		if (sqlCached) {
+			try {
+				await writeQuerySqlCache(id, sql);
+			} catch (error) {
+				this.error = errorMessage(error);
+				return;
+			}
+		}
 		this.tabs = [
 			...this.tabs,
 			{
@@ -525,9 +546,8 @@ class WorkspaceStore {
 						: t('tab.queryAt', { name: connection?.name ?? t('noun.database') })),
 				connectionId,
 				schema,
-				sql:
-					seedSql ??
-					(schema ? `SELECT * FROM ${qualifyIdent(connection?.engine, schema)}` : 'SELECT 1;'),
+				sql: sqlCached ? undefined : sql,
+				sqlCached,
 				autoRun: options?.autoRun === true
 			}
 		];
@@ -553,7 +573,7 @@ class WorkspaceStore {
 				this.error = t('query.sqlFileEmpty');
 				return;
 			}
-			this.openQuery(connectionId, schema, file.content, {
+			await this.openQuery(connectionId, schema, file.content, {
 				title: t('tab.sqlFileAt', { file: file.name, name: schema }),
 				autoRun: true
 			});
@@ -564,6 +584,12 @@ class WorkspaceStore {
 	}
 
 	closeTab(id: string) {
+		this.bumpSqlWriteEpoch(id);
+		const timer = this.sqlWriteTimers.get(id);
+		if (timer) clearTimeout(timer);
+		this.sqlWriteTimers.delete(id);
+		this.pendingSqlWrites.delete(id);
+		void deleteQuerySqlCache(id);
 		const index = this.tabs.findIndex((tab) => tab.id === id);
 		this.tabs = this.tabs.filter((tab) => tab.id !== id);
 		delete this.queryResults[id];
@@ -573,8 +599,100 @@ class WorkspaceStore {
 		}
 	}
 
+	async loadTabSql(id: string): Promise<string> {
+		const tab = this.tabs.find((item) => item.id === id);
+		if (!tab) return '';
+		if (tab.sqlCached) {
+			const pending = this.pendingSqlWrites.get(id);
+			if (pending != null) return pending;
+			return readQuerySqlCache(id);
+		}
+		return tab.sql ?? '';
+	}
+
+	flushTabSql(id: string, sql: string) {
+		if (!this.tabs.some((tab) => tab.id === id)) return;
+		if (!exceedsQuerySqlMemoryLimit(sql)) {
+			this.setTabSql(id, sql);
+			return;
+		}
+		this.patchTabSqlCache(id, true);
+		this.pendingSqlWrites.set(id, sql);
+		void this.flushPendingSqlWrite(id);
+	}
+
 	setTabSql(id: string, sql: string) {
-		this.tabs = this.tabs.map((tab) => (tab.id === id ? { ...tab, sql } : tab));
+		const current = this.tabs.find((tab) => tab.id === id);
+		if (!current) return;
+		if (exceedsQuerySqlMemoryLimit(sql)) {
+			this.patchTabSqlCache(id, true);
+			this.scheduleSqlCacheWrite(id, sql);
+			return;
+		}
+		if (current.sqlCached) {
+			this.bumpSqlWriteEpoch(id);
+			const timer = this.sqlWriteTimers.get(id);
+			if (timer) clearTimeout(timer);
+			this.sqlWriteTimers.delete(id);
+			this.pendingSqlWrites.delete(id);
+			void deleteQuerySqlCache(id);
+		}
+		if (current.sql === sql && !current.sqlCached) return;
+		this.tabs = this.tabs.map((tab) => (tab.id === id ? { ...tab, sql, sqlCached: false } : tab));
+	}
+
+	private patchTabSqlCache(id: string, sqlCached: boolean) {
+		const current = this.tabs.find((tab) => tab.id === id);
+		if (!current || (current.sqlCached === sqlCached && current.sql == null)) return;
+		this.tabs = this.tabs.map((tab) =>
+			tab.id === id ? { ...tab, sql: undefined, sqlCached } : tab
+		);
+	}
+
+	private bumpSqlWriteEpoch(id: string) {
+		const next = (this.sqlWriteEpoch.get(id) ?? 0) + 1;
+		this.sqlWriteEpoch.set(id, next);
+		return next;
+	}
+
+	private scheduleSqlCacheWrite(id: string, sql: string) {
+		this.pendingSqlWrites.set(id, sql);
+		const existing = this.sqlWriteTimers.get(id);
+		if (existing) clearTimeout(existing);
+		const timer = setTimeout(() => {
+			this.sqlWriteTimers.delete(id);
+			void this.flushPendingSqlWrite(id);
+		}, 400);
+		this.sqlWriteTimers.set(id, timer);
+	}
+
+	private async flushPendingSqlWrite(id: string) {
+		const sql = this.pendingSqlWrites.get(id);
+		if (sql == null) return;
+		const timer = this.sqlWriteTimers.get(id);
+		if (timer) {
+			clearTimeout(timer);
+			this.sqlWriteTimers.delete(id);
+		}
+		if (!this.tabs.some((tab) => tab.id === id)) {
+			this.pendingSqlWrites.delete(id);
+			return;
+		}
+		const epoch = this.sqlWriteEpoch.get(id) ?? 0;
+		try {
+			await writeQuerySqlCache(id, sql);
+			if ((this.sqlWriteEpoch.get(id) ?? 0) !== epoch) {
+				void deleteQuerySqlCache(id);
+				return;
+			}
+			if (this.pendingSqlWrites.get(id) === sql) {
+				this.pendingSqlWrites.delete(id);
+			} else if (this.pendingSqlWrites.has(id)) {
+				void this.flushPendingSqlWrite(id);
+			}
+		} catch (error) {
+			this.error = errorMessage(error);
+		}
 	}
 
 	async loadDatabases(connectionId: string) {

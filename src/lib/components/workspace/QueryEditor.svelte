@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { api, errorMessage } from '$lib/api/tauri';
 	import type { QueryLogEntry } from '$lib/api/types';
 	import { formatDuration, formatNumber } from '$lib/format';
@@ -18,16 +18,22 @@
 		connectionId,
 		schema,
 		sql,
-		autoRun = false
+		autoRun = false,
+		active = true,
+		sqlCached = false
 	}: {
 		tabId: string;
 		connectionId: string;
 		schema?: string;
 		sql: string;
 		autoRun?: boolean;
+		active?: boolean;
+		sqlCached?: boolean;
 	} = $props();
 
-	let text = $state(untrack(() => sql));
+	let text = $state('');
+	let hydrated = $state(false);
+	let loadingSql = $state(false);
 	let running = $state(false);
 	let error = $state<string | null>(null);
 	let localLog = $state<QueryLogEntry[]>([]);
@@ -48,7 +54,42 @@
 				? result.messages
 				: localLog
 	);
-	const canAct = $derived(!running && Boolean(text.trim()));
+	const canAct = $derived(!running && !loadingSql && Boolean(text.trim()));
+
+	$effect(() => {
+		const id = tabId;
+		const cached = untrack(() => sqlCached);
+		const seed = untrack(() => sql);
+		let cancelled = false;
+		hydrated = false;
+		loadingSql = cached;
+		void (async () => {
+			try {
+				const next = cached ? await workspace.loadTabSql(id) : seed;
+				if (cancelled) return;
+				text = next;
+			} catch (err) {
+				if (!cancelled) error = errorMessage(err);
+			} finally {
+				if (!cancelled) {
+					loadingSql = false;
+					hydrated = true;
+				}
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	});
+
+	$effect(() => {
+		if (!hydrated) return;
+		workspace.setTabSql(tabId, text);
+	});
+
+	onDestroy(() => {
+		if (hydrated) workspace.flushTabSql(tabId, text);
+	});
 
 	function format() {
 		try {
@@ -111,7 +152,7 @@
 	}
 
 	$effect(() => {
-		if (!autoRun || didAutoRun || running) return;
+		if (!hydrated || !autoRun || didAutoRun || running || loadingSql) return;
 		didAutoRun = true;
 		workspace.clearTabAutoRun(tabId);
 		void run();
@@ -120,7 +161,7 @@
 
 <div class="object-list">
 	<div class="filter-bar">
-		<button class="btn primary" onclick={run} disabled={running}
+		<button class="btn primary" onclick={run} disabled={running || loadingSql}
 			>{running ? t('query.running') : t('query.run')}</button
 		>
 		<button class="btn" onclick={format} disabled={!canAct}>{t('query.format')}</button>
@@ -133,13 +174,18 @@
 	</div>
 	<StackSplit>
 		{#snippet top()}
-			<SqlEditor
-				bind:value={text}
-				engine={connection?.engine}
-				onRun={run}
-				onFormat={format}
-				onExplain={explain}
-			/>
+			{#if loadingSql}
+				<div class="empty">{t('query.loadingSql')}</div>
+			{:else}
+				<SqlEditor
+					bind:value={text}
+					engine={connection?.engine}
+					visible={active}
+					onRun={run}
+					onFormat={format}
+					onExplain={explain}
+				/>
+			{/if}
 		{/snippet}
 		{#snippet bottom()}
 			{#if error}
