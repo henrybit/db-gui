@@ -33,8 +33,16 @@
 			case 'delete-database':
 				if (connectionId && schema) workspace.askDropDatabase(connectionId, schema);
 				break;
-			case 'dump-database':
-				if (connectionId && schema) workspace.askDumpDatabase(connectionId, schema);
+			case 'dump-database-data':
+				if (connectionId && schema) void workspace.exportDatabase(connectionId, schema, false);
+				break;
+			case 'dump-database-full':
+				if (connectionId && schema) void workspace.exportDatabase(connectionId, schema, true);
+				break;
+			case 'dump-table-data':
+				if (connectionId && schema && objectName) {
+					void workspace.exportTableData(connectionId, schema, objectName);
+				}
 				break;
 			case 'run-sql-file':
 				if (connectionId && schema) void workspace.runSqlFile(connectionId, schema);
@@ -62,12 +70,18 @@
 	}
 
 	function labelFor(action: ContextMenuAction): string {
-		if (action === 'create-database' || action === 'delete-database' || action === 'dump-database') {
+		if (
+			action === 'create-database' ||
+			action === 'delete-database' ||
+			action === 'dump-database-data' ||
+			action === 'dump-database-full'
+		) {
 			const connection = workspace.connections.find((item) => item.id === menu?.connectionId);
 			const noun = schemaNounLabel(connection?.engine);
 			if (action === 'create-database') return t('menu.createDatabase', { noun });
 			if (action === 'delete-database') return t('menu.deleteDatabase', { noun });
-			return t('menu.dumpDatabase', { noun });
+			if (action === 'dump-database-data') return t('menu.dumpDatabaseData', { noun });
+			return t('menu.dumpDatabaseFull', { noun });
 		}
 		if (action === 'refresh') {
 			if (menu?.objectName) {
@@ -91,7 +105,9 @@
 			'new-query': 'menu.newQuery',
 			'create-database': 'menu.createDatabase',
 			'delete-database': 'menu.deleteDatabase',
-			'dump-database': 'menu.dumpDatabase',
+			'dump-database-data': 'menu.dumpDatabaseData',
+			'dump-database-full': 'menu.dumpDatabaseFull',
+			'dump-table-data': 'menu.dumpTableData',
 			'run-sql-file': 'menu.runSqlFile',
 			refresh: 'menu.refresh',
 			'open-data': 'menu.openTable',

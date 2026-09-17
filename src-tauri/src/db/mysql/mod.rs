@@ -1,8 +1,10 @@
 mod values;
 
+use super::dump::{build_dump, build_table_data_dump, DumpDialect};
 use super::engine::DatabaseEngine;
-use super::ident::{create_mysql_database_sql, drop_mysql_database_sql, qualify, quote_ident, validate_ident};
-use super::dump::{build_dump, DumpDialect};
+use super::ident::{
+    create_mysql_database_sql, drop_mysql_database_sql, qualify, quote_ident, validate_ident,
+};
 use crate::error::{AppError, AppResult};
 use crate::models::{
     CharsetCatalog, CharsetInfo, CollationInfo, ColumnInfo, ConnectionProfile, DatabaseInfo,
@@ -11,8 +13,9 @@ use crate::models::{
 };
 use async_trait::async_trait;
 use mysql_async::prelude::*;
-use mysql_async::{Conn, OptsBuilder, Pool, PoolConstraints, PoolOpts, Row};
+use mysql_async::{Conn, OptsBuilder, Pool, PoolConstraints, PoolOpts, Row, SslOpts};
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::time::Instant;
 use values::{row_to_strings, statement_kind, value_to_display};
 
@@ -25,14 +28,14 @@ pub struct MySqlEngine {
 }
 
 impl MySqlEngine {
-    pub fn from_profile(profile: &ConnectionProfile) -> Self {
-        Self {
-            pool: Pool::new(opts_from_profile(profile)),
-        }
+    pub fn from_profile(profile: &ConnectionProfile) -> AppResult<Self> {
+        Ok(Self {
+            pool: Pool::new(opts_from_profile(profile)?),
+        })
     }
 
     pub async fn test(request: &TestConnectionRequest) -> AppResult<()> {
-        let pool = Pool::new(opts_from_request(request));
+        let pool = Pool::new(opts_from_request(request)?);
         let mut conn = pool.get_conn().await?;
         conn.ping().await?;
         drop(conn);
@@ -89,7 +92,10 @@ impl DatabaseEngine for MySqlEngine {
     async fn drop_database(&self, name: &str) -> AppResult<()> {
         let name = name.trim();
         validate_ident(name)?;
-        if SYSTEM_SCHEMAS.iter().any(|item| item.eq_ignore_ascii_case(name)) {
+        if SYSTEM_SCHEMAS
+            .iter()
+            .any(|item| item.eq_ignore_ascii_case(name))
+        {
             return Err(AppError::msg(format!(
                 "cannot drop system database: {name}"
             )));
@@ -100,10 +106,23 @@ impl DatabaseEngine for MySqlEngine {
         Ok(())
     }
 
-    async fn dump_database(&self, name: &str, include_data: bool) -> AppResult<String> {
+    async fn dump_database(
+        &self,
+        name: &str,
+        include_schema: bool,
+        include_data: bool,
+    ) -> AppResult<String> {
         let name = name.trim();
         validate_ident(name)?;
-        build_dump(self, name, include_data, DumpDialect::Mysql).await
+        build_dump(self, name, include_schema, include_data, DumpDialect::Mysql).await
+    }
+
+    async fn dump_table(&self, schema: &str, table: &str) -> AppResult<String> {
+        let schema = schema.trim();
+        let table = table.trim();
+        validate_ident(schema)?;
+        validate_ident(table)?;
+        build_table_data_dump(self, schema, table, DumpDialect::Mysql).await
     }
 
     async fn list_charset_catalog(&self) -> AppResult<CharsetCatalog> {
@@ -452,9 +471,7 @@ impl DatabaseEngine for MySqlEngine {
             validate_ident(schema)?;
             conn.query_drop(format!("USE {}", quote_ident(schema)))
                 .await?;
-            messages.push(crate::models::QueryLogEntry::info(format!(
-                "USE {schema}"
-            )));
+            messages.push(crate::models::QueryLogEntry::info(format!("USE {schema}")));
         }
 
         messages.push(crate::models::QueryLogEntry::info(format!(
@@ -546,23 +563,25 @@ impl DatabaseEngine for MySqlEngine {
     }
 }
 
-fn opts_from_profile(profile: &ConnectionProfile) -> OptsBuilder {
+fn opts_from_profile(profile: &ConnectionProfile) -> AppResult<OptsBuilder> {
     build_opts(
         &profile.host,
         profile.port,
         &profile.username,
         profile.password.as_deref(),
         profile.database.as_deref(),
+        profile.ssl_ca.as_deref(),
     )
 }
 
-fn opts_from_request(request: &TestConnectionRequest) -> OptsBuilder {
+fn opts_from_request(request: &TestConnectionRequest) -> AppResult<OptsBuilder> {
     build_opts(
         &request.host,
         request.port,
         &request.username,
         request.password.as_deref(),
         request.database.as_deref(),
+        request.ssl_ca.as_deref(),
     )
 }
 
@@ -572,7 +591,8 @@ fn build_opts(
     username: &str,
     password: Option<&str>,
     database: Option<&str>,
-) -> OptsBuilder {
+    ssl_ca: Option<&str>,
+) -> AppResult<OptsBuilder> {
     let constraints = PoolConstraints::new(0, 16).expect("valid pool constraints");
     let mut opts = OptsBuilder::default()
         .ip_or_hostname(host)
@@ -586,7 +606,21 @@ fn build_opts(
     if let Some(database) = database.filter(|value| !value.is_empty()) {
         opts = opts.db_name(Some(database));
     }
-    opts
+    if let Some(ssl_opts) = ssl_opts_from_ca(ssl_ca)? {
+        opts = opts.ssl_opts(ssl_opts);
+    }
+    Ok(opts)
+}
+
+fn ssl_opts_from_ca(ssl_ca: Option<&str>) -> AppResult<Option<SslOpts>> {
+    let Some(ca) = ssl_ca.map(str::trim).filter(|value| !value.is_empty()) else {
+        return Ok(None);
+    };
+    let path = PathBuf::from(ca);
+    if !path.is_file() {
+        return Err(AppError::msg(format!("CA certificate not found: {ca}")));
+    }
+    Ok(Some(SslOpts::default().with_root_certs(vec![path.into()])))
 }
 
 fn extract_ddl(row: &Row) -> AppResult<String> {
@@ -627,4 +661,22 @@ async fn append_mysql_warnings(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn skips_ssl_when_ca_missing() {
+        assert!(ssl_opts_from_ca(None).unwrap().is_none());
+        assert!(ssl_opts_from_ca(Some("")).unwrap().is_none());
+        assert!(ssl_opts_from_ca(Some("  ")).unwrap().is_none());
+    }
+
+    #[test]
+    fn rejects_missing_ca_file() {
+        let error = ssl_opts_from_ca(Some("/definitely/missing/ca.pem")).unwrap_err();
+        assert!(error.to_string().contains("CA certificate not found"));
+    }
 }

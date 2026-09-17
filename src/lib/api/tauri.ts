@@ -60,8 +60,19 @@ export const api = {
 	dropDatabase: (connectionId: string, name: string) =>
 		call<void>('drop_database', { connectionId, name }),
 
-	dumpDatabase: (connectionId: string, name: string, includeData = true) =>
-		call<string>('dump_database', { connectionId, name, includeData }),
+	dumpDatabase: (connectionId: string, name: string, includeSchema = true, includeData = true) =>
+		call<string>('dump_database', {
+			connectionId,
+			name,
+			includeSchema,
+			includeData
+		}),
+
+	dumpTable: (connectionId: string, schema: string, table: string) =>
+		call<string>('dump_table', { connectionId, schema, table }),
+
+	writeTextFile: (path: string, contents: string) =>
+		call<string>('write_text_file', { path, contents }),
 
 	listCharsetCatalog: (connectionId: string) =>
 		call<CharsetCatalog>('list_charset_catalog', { connectionId }),

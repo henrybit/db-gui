@@ -45,6 +45,8 @@ pub struct ConnectionProfile {
     #[serde(default)]
     pub database: Option<String>,
     #[serde(default)]
+    pub ssl_ca: Option<String>,
+    #[serde(default)]
     pub save_password: bool,
 }
 
@@ -90,6 +92,8 @@ pub struct TestConnectionRequest {
     pub username: String,
     pub password: Option<String>,
     pub database: Option<String>,
+    #[serde(default)]
+    pub ssl_ca: Option<String>,
 }
 
 impl TestConnectionRequest {
@@ -111,5 +115,20 @@ mod tests {
         );
         assert_eq!(EngineKind::parse("pgsql").unwrap(), EngineKind::Postgres);
         assert!(EngineKind::parse("oracle").is_err());
+    }
+
+    #[test]
+    fn deserializes_profile_without_ssl_ca() {
+        let json = r#"{
+            "id":"1",
+            "name":"local",
+            "engine":"mysql",
+            "host":"127.0.0.1",
+            "port":3306,
+            "username":"root",
+            "savePassword":true
+        }"#;
+        let profile: ConnectionProfile = serde_json::from_str(json).unwrap();
+        assert!(profile.ssl_ca.is_none());
     }
 }

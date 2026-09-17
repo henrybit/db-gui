@@ -7,6 +7,7 @@ export type ParsedConnectionUrl = {
 	username: string;
 	password: string;
 	database: string;
+	sslCa: string;
 };
 
 const URL_SCHEME = /^(postgresql|postgres|pgsql|mysql|mariadb):\/\//i;
@@ -36,9 +37,7 @@ export function parseConnectionUrl(input: string): ParsedConnectionUrl | null {
 	}
 
 	const scheme = url.protocol.replace(/:$/, '').toLowerCase();
-	const engine = normalizeEngine(
-		scheme === 'mysql' || scheme === 'mariadb' ? 'mysql' : 'postgres'
-	);
+	const engine = normalizeEngine(scheme === 'mysql' || scheme === 'mariadb' ? 'mysql' : 'postgres');
 	const host = url.hostname.trim();
 	if (!host) return null;
 
@@ -50,8 +49,17 @@ export function parseConnectionUrl(input: string): ParsedConnectionUrl | null {
 	const password = decodeUrlComponent(url.password);
 	const database =
 		decodeUrlComponent(url.pathname.replace(/^\/+/, '').replace(/\/+$/, '')) || preset.database;
+	const sslCa = firstSearchParam(url, ['ssl-ca', 'ssl_ca', 'sslca', 'ca']);
 
-	return { engine, host, port, username, password, database };
+	return { engine, host, port, username, password, database, sslCa };
+}
+
+function firstSearchParam(url: URL, names: string[]): string {
+	for (const name of names) {
+		const value = url.searchParams.get(name);
+		if (value?.trim()) return value.trim();
+	}
+	return '';
 }
 
 function decodeUrlComponent(value: string): string {

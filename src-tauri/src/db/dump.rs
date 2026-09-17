@@ -9,51 +9,43 @@ pub enum DumpDialect {
     Postgres,
 }
 
+pub fn dump_mode_label(include_schema: bool, include_data: bool) -> &'static str {
+    match (include_schema, include_data) {
+        (true, true) => "schema + data",
+        (true, false) => "schema only",
+        (false, true) => "data only",
+        (false, false) => "empty",
+    }
+}
+
 pub async fn build_dump(
     engine: &impl DatabaseEngine,
     schema: &str,
+    include_schema: bool,
     include_data: bool,
     dialect: DumpDialect,
 ) -> AppResult<String> {
     validate_ident(schema)?;
+    if !include_schema && !include_data {
+        return Err(AppError::msg("dump must include schema or data"));
+    }
 
     let mut out = String::new();
-    out.push_str(&format!("-- DB GUI dump\n-- Target: {schema}\n"));
-    out.push_str(&format!(
-        "-- Mode: {}\n\n",
-        if include_data {
-            "schema + data"
-        } else {
-            "schema only"
-        }
-    ));
-
-    match dialect {
-        DumpDialect::Mysql => {
-            out.push_str(&format!("CREATE DATABASE IF NOT EXISTS {};\n", quote_ident(schema)));
-            out.push_str(&format!("USE {};\n\n", quote_ident(schema)));
-        }
-        DumpDialect::Postgres => {
-            out.push_str(&format!(
-                "CREATE SCHEMA IF NOT EXISTS {};\n\n",
-                quote_ident_pg(schema)
-            ));
-        }
-    }
+    out.push_str(&dump_header(schema, include_schema, include_data));
+    append_database_preamble(&mut out, schema, include_schema, dialect);
 
     let tables = engine.list_tables(schema).await?;
     for table in &tables {
-        out.push_str(&format!("-- Table: {}\n", table.name));
-        match engine
-            .get_ddl(schema, ObjectKind::Table, &table.name)
-            .await
-        {
-            Ok(ddl) => {
-                out.push_str(ddl.trim_end());
-                out.push_str(";\n\n");
-            }
-            Err(error) => {
-                out.push_str(&format!("-- skipped table DDL: {error}\n\n"));
+        if include_schema {
+            out.push_str(&format!("-- Table: {}\n", table.name));
+            match engine.get_ddl(schema, ObjectKind::Table, &table.name).await {
+                Ok(ddl) => {
+                    out.push_str(ddl.trim_end());
+                    out.push_str(";\n\n");
+                }
+                Err(error) => {
+                    out.push_str(&format!("-- skipped table DDL: {error}\n\n"));
+                }
             }
         }
 
@@ -62,6 +54,75 @@ pub async fn build_dump(
         }
     }
 
+    if include_schema {
+        append_object_ddl(&mut out, engine, schema).await?;
+    }
+
+    out.push_str("-- Dump completed\n");
+    Ok(out)
+}
+
+pub async fn build_table_data_dump(
+    engine: &impl DatabaseEngine,
+    schema: &str,
+    table: &str,
+    dialect: DumpDialect,
+) -> AppResult<String> {
+    validate_ident(schema)?;
+    validate_ident(table)?;
+
+    let mut out = String::new();
+    out.push_str(&dump_header(&format!("{schema}.{table}"), false, true));
+    append_database_preamble(&mut out, schema, false, dialect);
+    append_table_data(&mut out, engine, schema, table, dialect).await?;
+    out.push_str("-- Dump completed\n");
+    Ok(out)
+}
+
+fn dump_header(target: &str, include_schema: bool, include_data: bool) -> String {
+    format!(
+        "-- DB GUI dump\n-- Target: {target}\n-- Mode: {}\n\n",
+        dump_mode_label(include_schema, include_data)
+    )
+}
+
+fn append_database_preamble(
+    out: &mut String,
+    schema: &str,
+    include_schema: bool,
+    dialect: DumpDialect,
+) {
+    match dialect {
+        DumpDialect::Mysql => {
+            if include_schema {
+                out.push_str(&format!(
+                    "CREATE DATABASE IF NOT EXISTS {};\n",
+                    quote_ident(schema)
+                ));
+            }
+            out.push_str(&format!("USE {};\n\n", quote_ident(schema)));
+        }
+        DumpDialect::Postgres => {
+            if include_schema {
+                out.push_str(&format!(
+                    "CREATE SCHEMA IF NOT EXISTS {};\n\n",
+                    quote_ident_pg(schema)
+                ));
+            } else {
+                out.push_str(&format!(
+                    "SET search_path TO {};\n\n",
+                    quote_ident_pg(schema)
+                ));
+            }
+        }
+    }
+}
+
+async fn append_object_ddl(
+    out: &mut String,
+    engine: &impl DatabaseEngine,
+    schema: &str,
+) -> AppResult<()> {
     let views = engine.list_views(schema).await?;
     for view in &views {
         out.push_str(&format!("-- View: {}\n", view.name));
@@ -106,8 +167,7 @@ pub async fn build_dump(
         }
     }
 
-    out.push_str("-- Dump completed\n");
-    Ok(out)
+    Ok(())
 }
 
 async fn append_table_data(
@@ -196,5 +256,24 @@ fn sql_literal(value: Option<&str>) -> String {
     match value {
         None => "NULL".to_string(),
         Some(text) => format!("'{}'", text.replace('\'', "''")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn labels_dump_modes() {
+        assert_eq!(dump_mode_label(true, true), "schema + data");
+        assert_eq!(dump_mode_label(true, false), "schema only");
+        assert_eq!(dump_mode_label(false, true), "data only");
+    }
+
+    #[test]
+    fn builds_dump_header() {
+        let header = dump_header("shop.orders", false, true);
+        assert!(header.contains("-- Target: shop.orders"));
+        assert!(header.contains("-- Mode: data only"));
     }
 }

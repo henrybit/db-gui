@@ -18,7 +18,13 @@ pub trait DatabaseEngine: Send + Sync {
         collation: Option<&str>,
     ) -> AppResult<()>;
     async fn drop_database(&self, name: &str) -> AppResult<()>;
-    async fn dump_database(&self, name: &str, include_data: bool) -> AppResult<String>;
+    async fn dump_database(
+        &self,
+        name: &str,
+        include_schema: bool,
+        include_data: bool,
+    ) -> AppResult<String>;
+    async fn dump_table(&self, schema: &str, table: &str) -> AppResult<String>;
     async fn list_charset_catalog(&self) -> AppResult<CharsetCatalog>;
     async fn list_tables(&self, schema: &str) -> AppResult<Vec<TableInfo>>;
     async fn list_views(&self, schema: &str) -> AppResult<Vec<ViewInfo>>;
@@ -48,7 +54,7 @@ pub enum LiveEngine {
 impl LiveEngine {
     pub fn from_profile(profile: &ConnectionProfile) -> AppResult<Self> {
         match profile.engine_kind()? {
-            EngineKind::MySql => Ok(Self::MySql(MySqlEngine::from_profile(profile))),
+            EngineKind::MySql => Ok(Self::MySql(MySqlEngine::from_profile(profile)?)),
             EngineKind::Postgres => Ok(Self::Postgres(PostgresEngine::from_profile(profile)?)),
         }
     }
@@ -93,8 +99,17 @@ impl DatabaseEngine for LiveEngine {
         dispatch_engine!(self, drop_database, name)
     }
 
-    async fn dump_database(&self, name: &str, include_data: bool) -> AppResult<String> {
-        dispatch_engine!(self, dump_database, name, include_data)
+    async fn dump_database(
+        &self,
+        name: &str,
+        include_schema: bool,
+        include_data: bool,
+    ) -> AppResult<String> {
+        dispatch_engine!(self, dump_database, name, include_schema, include_data)
+    }
+
+    async fn dump_table(&self, schema: &str, table: &str) -> AppResult<String> {
+        dispatch_engine!(self, dump_table, schema, table)
     }
 
     async fn list_charset_catalog(&self) -> AppResult<CharsetCatalog> {

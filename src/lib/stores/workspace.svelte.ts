@@ -3,6 +3,7 @@ import { qualifyIdent } from '$lib/engine';
 import { uid } from '$lib/format';
 import { folderMessageKey, schemaNounLabel, t } from '$lib/i18n/i18n.svelte';
 import { afterPaint, runExclusive } from '$lib/runtime/jobs';
+import { pickSqlSavePath, sqlDumpFileName, writeSqlFile } from '$lib/save-sql-file';
 import { connectStatus, forgetExpandedKeys } from '$lib/sessions';
 import type {
 	ConnectionListItem,
@@ -12,7 +13,6 @@ import type {
 	CreateDatabasePrompt,
 	DatabaseInfo,
 	DropDatabasePrompt,
-	DumpDatabasePrompt,
 	FolderKind,
 	IndexInfo,
 	ObjectKind,
@@ -54,7 +54,6 @@ class WorkspaceStore {
 	confirmDelete = $state<{ id: string; name: string } | null>(null);
 	createDatabasePrompt = $state<CreateDatabasePrompt | null>(null);
 	dropDatabasePrompt = $state<DropDatabasePrompt | null>(null);
-	dumpDatabasePrompt = $state<DumpDatabasePrompt | null>(null);
 	contextMenu = $state<ContextMenuState | null>(null);
 	queryResults = $state<Record<string, QueryResult | null>>({});
 	lastMessage = $state<string | null>(null);
@@ -107,6 +106,7 @@ class WorkspaceStore {
 			username: 'root',
 			password: '',
 			database: '',
+			sslCa: '',
 			savePassword: true
 		};
 		this.dialogOpen = true;
@@ -125,6 +125,7 @@ class WorkspaceStore {
 			username: item.username,
 			password: item.password ?? '',
 			database: item.database ?? '',
+			sslCa: item.sslCa ?? '',
 			savePassword: item.savePassword
 		};
 		this.dialogOpen = true;
@@ -241,7 +242,10 @@ class WorkspaceStore {
 			if (!activeStillOpen) {
 				this.activeTabId = remaining[remaining.length - 1]?.id ?? null;
 			}
-			if (this.selection?.connectionId === prompt.connectionId && this.selection.schema === prompt.name) {
+			if (
+				this.selection?.connectionId === prompt.connectionId &&
+				this.selection.schema === prompt.name
+			) {
 				this.selection = { connectionId: prompt.connectionId };
 			}
 			this.expanded = new Set(
@@ -274,34 +278,45 @@ class WorkspaceStore {
 		}
 	}
 
-	askDumpDatabase(connectionId: string, schema: string) {
+	async exportDatabase(connectionId: string, schema: string, includeSchema: boolean) {
 		const item = this.connections.find((c) => c.id === connectionId);
 		if (!item?.connected || !schema) return;
-		this.error = null;
-		this.dumpDatabasePrompt = {
-			connectionId: item.id,
-			connectionName: item.name,
-			engine: item.engine,
-			name: schema
-		};
 		this.closeMenu();
-	}
-
-	async confirmDumpDatabase(includeData: boolean) {
-		if (!this.dumpDatabasePrompt) return;
-		const prompt = this.dumpDatabasePrompt;
-		const key = `dump-db:${prompt.connectionId}:${prompt.name}`;
+		await afterPaint();
+		const fileName = sqlDumpFileName(schema, includeSchema ? '' : '_data');
+		const path = await pickSqlSavePath(fileName, t('dialog.saveSqlTitle'));
+		if (!path) return;
+		const key = `dump-db:${connectionId}:${schema}`;
 		this.begin(key);
 		this.error = null;
+		this.status = t('status.exporting', { name: schema });
 		try {
-			const sql = await api.dumpDatabase(prompt.connectionId, prompt.name, includeData);
-			const { downloadTextFile } = await import('$lib/download');
-			downloadTextFile(`${prompt.name}.sql`, sql);
-			this.dumpDatabasePrompt = null;
-			this.status = t('status.dumped', {
-				noun: schemaNounLabel(prompt.engine),
-				name: prompt.name
-			});
+			const sql = await api.dumpDatabase(connectionId, schema, includeSchema, true);
+			const saved = await writeSqlFile(path, sql, fileName);
+			this.status = t('status.exportedTo', { name: schema, path: saved });
+		} catch (error) {
+			this.error = errorMessage(error);
+		} finally {
+			this.end(key);
+		}
+	}
+
+	async exportTableData(connectionId: string, schema: string, table: string) {
+		const item = this.connections.find((c) => c.id === connectionId);
+		if (!item?.connected || !schema || !table) return;
+		this.closeMenu();
+		await afterPaint();
+		const fileName = sqlDumpFileName(table, '_data');
+		const path = await pickSqlSavePath(fileName, t('dialog.saveSqlTitle'));
+		if (!path) return;
+		const key = `dump-table:${connectionId}:${schema}:${table}`;
+		this.begin(key);
+		this.error = null;
+		this.status = t('status.exporting', { name: table });
+		try {
+			const sql = await api.dumpTable(connectionId, schema, table);
+			const saved = await writeSqlFile(path, sql, fileName);
+			this.status = t('status.exportedTo', { name: table, path: saved });
 		} catch (error) {
 			this.error = errorMessage(error);
 		} finally {
@@ -405,7 +420,11 @@ class WorkspaceStore {
 
 	selectDatabase(connectionId: string, schema: string) {
 		this.selection = { connectionId, schema };
-		this.expanded = new Set([...this.expanded, `conn:${connectionId}`, `db:${connectionId}:${schema}`]);
+		this.expanded = new Set([
+			...this.expanded,
+			`conn:${connectionId}`,
+			`db:${connectionId}:${schema}`
+		]);
 		this.openObjectsTab(connectionId, schema, 'tables');
 		void this.ensureFolder(connectionId, schema, 'tables');
 	}
@@ -604,9 +623,15 @@ class WorkspaceStore {
 					case 'indexes':
 						return { kind: 'indexes' as const, items: await api.listIndexes(connectionId, schema) };
 					case 'triggers':
-						return { kind: 'triggers' as const, items: await api.listTriggers(connectionId, schema) };
+						return {
+							kind: 'triggers' as const,
+							items: await api.listTriggers(connectionId, schema)
+						};
 					case 'functions':
-						return { kind: 'functions' as const, items: await api.listRoutines(connectionId, schema) };
+						return {
+							kind: 'functions' as const,
+							items: await api.listRoutines(connectionId, schema)
+						};
 				}
 			});
 			if (!result) return;
@@ -615,8 +640,10 @@ class WorkspaceStore {
 			if (result.kind === 'tables') next.tables = { ...current.tables, [schema]: result.items };
 			if (result.kind === 'views') next.views = { ...current.views, [schema]: result.items };
 			if (result.kind === 'indexes') next.indexes = { ...current.indexes, [schema]: result.items };
-			if (result.kind === 'triggers') next.triggers = { ...current.triggers, [schema]: result.items };
-			if (result.kind === 'functions') next.routines = { ...current.routines, [schema]: result.items };
+			if (result.kind === 'triggers')
+				next.triggers = { ...current.triggers, [schema]: result.items };
+			if (result.kind === 'functions')
+				next.routines = { ...current.routines, [schema]: result.items };
 			this.schema = { ...this.schema, [connectionId]: next };
 		} catch (error) {
 			this.error = errorMessage(error);
@@ -701,7 +728,10 @@ class WorkspaceStore {
 		}
 	}
 
-	openMenu(event: MouseEvent, payload: Omit<ContextMenuState, 'x' | 'y' | 'actions'> & { actions: ContextMenuAction[] }) {
+	openMenu(
+		event: MouseEvent,
+		payload: Omit<ContextMenuState, 'x' | 'y' | 'actions'> & { actions: ContextMenuAction[] }
+	) {
 		event.preventDefault();
 		event.stopPropagation();
 		this.contextMenu = { x: event.clientX, y: event.clientY, ...payload };

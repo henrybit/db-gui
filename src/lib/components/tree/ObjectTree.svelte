@@ -20,7 +20,12 @@
 
 	const folders: FolderKind[] = ['tables', 'views', 'indexes', 'triggers', 'functions'];
 
-	function isSelected(connectionId: string, schema?: string, folder?: FolderKind, objectName?: string) {
+	function isSelected(
+		connectionId: string,
+		schema?: string,
+		folder?: FolderKind,
+		objectName?: string
+	) {
 		const sel = workspace.selection;
 		return (
 			sel?.connectionId === connectionId &&
@@ -56,7 +61,9 @@
 		if (folder === 'indexes')
 			return (cache.indexes[schema] ?? []).map((item) => `${item.tableName}.${item.name}`);
 		if (folder === 'triggers') return (cache.triggers[schema] ?? []).map((item) => item.name);
-		return (cache.routines[schema] ?? []).map((item) => `${item.routineType === 'PROCEDURE' ? 'P' : 'F'}:${item.name}`);
+		return (cache.routines[schema] ?? []).map(
+			(item) => `${item.routineType === 'PROCEDURE' ? 'P' : 'F'}:${item.name}`
+		);
 	}
 
 	function onActivate(event: KeyboardEvent, action: () => void) {
@@ -94,7 +101,14 @@
 				workspace.openMenu(event, {
 					connectionId: connection.id,
 					actions: connection.connected
-						? ['new-query', 'create-database', 'refresh', 'disconnect', 'edit-connection', 'delete-connection']
+						? [
+								'new-query',
+								'create-database',
+								'refresh',
+								'disconnect',
+								'edit-connection',
+								'delete-connection'
+							]
 						: ['connect', 'edit-connection', 'delete-connection', 'new-connection']
 				})}
 			role="button"
@@ -113,7 +127,10 @@
 			>
 				{#if connOpen}<ChevronDown size={12} />{:else}<ChevronRight size={12} />{/if}
 			</button>
-			<span class="icon" style="color:{connection.connected ? 'var(--success)' : 'var(--text-muted)'}">
+			<span
+				class="icon"
+				style="color:{connection.connected ? 'var(--success)' : 'var(--text-muted)'}"
+			>
 				<Server size={14} />
 			</span>
 			<span class="truncate">{connection.name}</span>
@@ -135,12 +152,20 @@
 							connectionId: connection.id,
 							schema: database.name,
 							actions: database.isSystem
-								? ['new-query', 'run-sql-file', 'create-database', 'dump-database', 'refresh']
+								? [
+										'new-query',
+										'run-sql-file',
+										'create-database',
+										'dump-database-data',
+										'dump-database-full',
+										'refresh'
+									]
 								: [
 										'new-query',
 										'run-sql-file',
 										'create-database',
-										'dump-database',
+										'dump-database-data',
+										'dump-database-full',
 										'delete-database',
 										'refresh'
 									]
@@ -160,7 +185,9 @@
 						{#if dbOpen}<ChevronDown size={12} />{:else}<ChevronRight size={12} />{/if}
 					</button>
 					<span class="icon" style="color:#2563eb"><Database size={14} /></span>
-					<span class="truncate" title={isPostgres(connection.engine) ? t('tree.schema') : t('tree.database')}
+					<span
+						class="truncate"
+						title={isPostgres(connection.engine) ? t('tree.schema') : t('tree.database')}
 						>{database.name}</span
 					>
 				</div>
@@ -227,13 +254,7 @@
 										workspace.selectObject(connection.id, database.name, folder, kind, display)}
 									onkeydown={(event) =>
 										onActivate(event, () =>
-											workspace.selectObject(
-												connection.id,
-												database.name,
-												folder,
-												kind,
-												display
-											)
+											workspace.selectObject(connection.id, database.name, folder, kind, display)
 										)}
 									ondblclick={() => {
 										if (kind === 'table' || kind === 'view') {
@@ -252,9 +273,11 @@
 											objectKind: kind,
 											objectName: display,
 											actions:
-												kind === 'table' || kind === 'view'
-													? ['open-data', 'open-ddl', 'new-query', 'refresh']
-													: ['open-ddl', 'refresh']
+												kind === 'table'
+													? ['open-data', 'open-ddl', 'dump-table-data', 'new-query', 'refresh']
+													: kind === 'view'
+														? ['open-data', 'open-ddl', 'new-query', 'refresh']
+														: ['open-ddl', 'refresh']
 										})}
 									role="button"
 									tabindex="0"

@@ -13,6 +13,7 @@ export interface ConnectionProfile {
 	username: string;
 	password?: string | null;
 	database?: string | null;
+	sslCa?: string | null;
 	savePassword: boolean;
 }
 
@@ -25,6 +26,7 @@ export interface ConnectionListItem {
 	username: string;
 	password?: string | null;
 	database?: string | null;
+	sslCa?: string | null;
 	savePassword: boolean;
 	connected: boolean;
 }
@@ -40,6 +42,7 @@ export interface TestConnectionRequest {
 	username: string;
 	password?: string | null;
 	database?: string | null;
+	sslCa?: string | null;
 }
 
 export interface DatabaseInfo {
@@ -180,7 +183,9 @@ export type ContextMenuAction =
 	| 'new-query'
 	| 'create-database'
 	| 'delete-database'
-	| 'dump-database'
+	| 'dump-database-data'
+	| 'dump-database-full'
+	| 'dump-table-data'
 	| 'run-sql-file'
 	| 'refresh'
 	| 'open-data'
@@ -195,13 +200,6 @@ export interface CreateDatabasePrompt {
 }
 
 export interface DropDatabasePrompt {
-	connectionId: string;
-	connectionName: string;
-	engine: string;
-	name: string;
-}
-
-export interface DumpDatabasePrompt {
 	connectionId: string;
 	connectionName: string;
 	engine: string;

@@ -12,6 +12,8 @@ commands.allow = [
   "create_database",
   "drop_database",
   "dump_database",
+  "dump_table",
+  "write_text_file",
   "list_charset_catalog",
   "list_tables",
   "list_views",

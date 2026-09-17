@@ -7,9 +7,10 @@ mod state;
 
 use commands::{
     connect_session, create_database, delete_connection, disconnect_session, drop_database,
-    dump_database, execute_sql, get_columns, get_ddl, list_charset_catalog, list_connections,
-    list_databases, list_indexes, list_routines, list_tables, list_triggers, list_views,
-    preview_table, table_row_count, test_connection, upsert_connection,
+    dump_database, dump_table, execute_sql, get_columns, get_ddl, list_charset_catalog,
+    list_connections, list_databases, list_indexes, list_routines, list_tables, list_triggers,
+    list_views, preview_table, table_row_count, test_connection, upsert_connection,
+    write_text_file,
 };
 use state::AppState;
 use tauri::Manager;
@@ -17,6 +18,7 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -41,6 +43,8 @@ pub fn run() {
             create_database,
             drop_database,
             dump_database,
+            dump_table,
+            write_text_file,
             list_charset_catalog,
             list_tables,
             list_views,

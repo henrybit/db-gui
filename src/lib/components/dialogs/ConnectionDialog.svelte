@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { workspace } from '$lib/stores/workspace.svelte';
-	import { api, errorMessage } from '$lib/api/tauri';
+	import { api, errorMessage, isTauriRuntime } from '$lib/api/tauri';
 	import { ENGINE_PRESETS, engineLabel, normalizeEngine, type EngineKind } from '$lib/engine';
 	import {
 		connectionUrlPlaceholder,
@@ -20,6 +20,7 @@
 			username: ENGINE_PRESETS.mysql.username,
 			password: '',
 			database: ENGINE_PRESETS.mysql.database,
+			sslCa: '',
 			savePassword: true
 		}
 	);
@@ -45,7 +46,11 @@
 		if (!profile.database || profile.database === previous.database) {
 			profile.database = preset.database;
 		}
-		if (profile.name === previous.name || profile.name === 'MySQL' || profile.name === 'PostgreSQL') {
+		if (
+			profile.name === previous.name ||
+			profile.name === 'MySQL' ||
+			profile.name === 'PostgreSQL'
+		) {
 			profile.name = preset.name;
 		}
 		profile.engine = next;
@@ -73,6 +78,7 @@
 		profile.username = parsed.username;
 		profile.password = parsed.password;
 		profile.database = parsed.database;
+		profile.sslCa = parsed.sslCa;
 		if (
 			!profile.name ||
 			profile.name === 'MySQL' ||
@@ -118,7 +124,8 @@
 				port: Number(profile.port) || ENGINE_PRESETS[engine].port,
 				username: profile.username,
 				password: profile.password,
-				database: profile.database
+				database: profile.database,
+				sslCa: profile.sslCa
 			});
 			testOk = true;
 			testMessage = t('dialog.connectionSucceeded');
@@ -134,8 +141,20 @@
 		void workspace.saveConnection({
 			...profile,
 			port: Number(profile.port) || ENGINE_PRESETS[engine].port,
-			engine
+			engine,
+			sslCa: profile.sslCa?.trim() ? profile.sslCa.trim() : null
 		});
+	}
+
+	async function pickCaFile() {
+		if (!isTauriRuntime()) return;
+		const { open } = await import('@tauri-apps/plugin-dialog');
+		const selected = await open({
+			title: t('dialog.sslCa'),
+			multiple: false,
+			filters: [{ name: 'Certificate', extensions: ['pem', 'crt', 'cer', 'cert'] }]
+		});
+		if (typeof selected === 'string') profile.sslCa = selected;
 	}
 </script>
 
@@ -195,6 +214,21 @@
 				<span>{t('dialog.database')}</span>
 				<input bind:value={profile.database} placeholder={databaseHint} />
 			</label>
+			{#if engine === 'mysql'}
+				<label class="field">
+					<span>{t('dialog.sslCa')}</span>
+					<div class="field-control">
+						<input
+							bind:value={profile.sslCa}
+							placeholder={t('dialog.sslCaPlaceholder')}
+							spellcheck="false"
+						/>
+						<button class="btn" type="button" onclick={() => void pickCaFile()}
+							>{t('dialog.browse')}</button
+						>
+					</div>
+				</label>
+			{/if}
 			<label class="field">
 				<span>{t('dialog.savePassword')}</span>
 				<input type="checkbox" bind:checked={profile.savePassword} />
@@ -207,7 +241,9 @@
 			<button class="btn" onclick={test} disabled={testing}
 				>{testing ? t('dialog.testing') : t('dialog.test')}</button
 			>
-			<button class="btn" onclick={() => (workspace.dialogOpen = false)}>{t('dialog.cancel')}</button>
+			<button class="btn" onclick={() => (workspace.dialogOpen = false)}
+				>{t('dialog.cancel')}</button
+			>
 			<button class="btn primary" onclick={save} disabled={workspace.isPending('save-connection')}
 				>{t('dialog.save')}</button
 			>

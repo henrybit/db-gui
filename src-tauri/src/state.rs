@@ -68,6 +68,12 @@ impl AppState {
         if !profile.save_password {
             profile.password = None;
         }
+        profile.ssl_ca = profile
+            .ssl_ca
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_string());
 
         {
             let mut profiles = self.profiles.write().await;

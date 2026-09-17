@@ -7,9 +7,7 @@ import {
 
 describe('connection url', () => {
 	it('uses engine-specific placeholders', () => {
-		expect(connectionUrlPlaceholder('mysql')).toBe(
-			'mysql://root:password@127.0.0.1:3306/database'
-		);
+		expect(connectionUrlPlaceholder('mysql')).toBe('mysql://root:password@127.0.0.1:3306/database');
 		expect(connectionUrlPlaceholder('pgsql')).toBe(
 			'postgresql://postgres:password@127.0.0.1:5432/postgres'
 		);
@@ -25,15 +23,14 @@ describe('connection url', () => {
 	});
 
 	it('parses mysql and mariadb urls', () => {
-		expect(
-			parseConnectionUrl('mysql://app:s3cret@db.example.com:3306/shop')
-		).toEqual({
+		expect(parseConnectionUrl('mysql://app:s3cret@db.example.com:3306/shop')).toEqual({
 			engine: 'mysql',
 			host: 'db.example.com',
 			port: 3306,
 			username: 'app',
 			password: 's3cret',
-			database: 'shop'
+			database: 'shop',
+			sslCa: ''
 		});
 		expect(parseConnectionUrl('mariadb://root@127.0.0.1/app')).toEqual({
 			engine: 'mysql',
@@ -41,8 +38,28 @@ describe('connection url', () => {
 			port: 3306,
 			username: 'root',
 			password: '',
-			database: 'app'
+			database: 'app',
+			sslCa: ''
 		});
+	});
+
+	it('parses mysql ssl-ca query parameter', () => {
+		expect(
+			parseConnectionUrl(
+				'mysql://3RongwYzrjiCbcf.root:secret@gateway01.example.com:4000/account?ssl-ca=/etc/ssl/cert.pem'
+			)
+		).toEqual({
+			engine: 'mysql',
+			host: 'gateway01.example.com',
+			port: 4000,
+			username: '3RongwYzrjiCbcf.root',
+			password: 'secret',
+			database: 'account',
+			sslCa: '/etc/ssl/cert.pem'
+		});
+		expect(
+			parseConnectionUrl('mysql://root@127.0.0.1:3306/app?sslca=%2Fetc%2Fssl%2Fcert.pem')?.sslCa
+		).toBe('/etc/ssl/cert.pem');
 	});
 
 	it('parses supabase-style postgresql urls', () => {
@@ -55,19 +72,23 @@ describe('connection url', () => {
 			port: 5432,
 			username: 'postgres',
 			password: '[YOUR-PASSWORD]',
-			database: 'postgres'
+			database: 'postgres',
+			sslCa: ''
 		});
 	});
 
 	it('decodes percent-encoded credentials and database', () => {
-		const parsed = parseConnectionUrl('postgresql://user:p%40ss%3Aword@db.example.com:5432/my%2Fdb');
+		const parsed = parseConnectionUrl(
+			'postgresql://user:p%40ss%3Aword@db.example.com:5432/my%2Fdb'
+		);
 		expect(parsed).toEqual({
 			engine: 'postgres',
 			host: 'db.example.com',
 			port: 5432,
 			username: 'user',
 			password: 'p@ss:word',
-			database: 'my/db'
+			database: 'my/db',
+			sslCa: ''
 		});
 	});
 
@@ -78,7 +99,8 @@ describe('connection url', () => {
 			port: 5432,
 			username: 'alice',
 			password: '',
-			database: 'postgres'
+			database: 'postgres',
+			sslCa: ''
 		});
 		expect(parseConnectionUrl('mysql://root@127.0.0.1/')).toEqual({
 			engine: 'mysql',
@@ -86,7 +108,8 @@ describe('connection url', () => {
 			port: 3306,
 			username: 'root',
 			password: '',
-			database: ''
+			database: '',
+			sslCa: ''
 		});
 	});
 
