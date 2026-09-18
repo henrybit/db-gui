@@ -1,4 +1,4 @@
-# DB GUI
+# HiDataLinker
 
 Tauri 2 + SvelteKit desktop client for MySQL, with a Navicat-style object tree, data grid, structure view, DDL viewer, and SQL editor.
 

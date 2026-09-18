@@ -1,5 +1,5 @@
 export const en = {
-	'app.title': 'DB GUI',
+	'app.title': 'HiDataLinker',
 	'welcome.blurb':
 		'Navicat-style manager for MySQL and PostgreSQL. Create a connection, browse tables, views, indexes, triggers and functions, then inspect data or run SQL.',
 	'welcome.newConnection': 'New Connection',

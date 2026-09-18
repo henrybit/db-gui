@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "DB GUI",
+  "productName": "HiDataLinker",
   "version": "0.1.0",
   "identifier": "com.dbgui.app",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "DB GUI",
+        "title": "HiDataLinker",
         "width": 1440,
         "height": 900,
         "minWidth": 1100,

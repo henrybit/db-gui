@@ -1,7 +1,7 @@
 import type { MessageKey } from './en';
 
 export const zh: Record<MessageKey, string> = {
-	'app.title': 'DB GUI',
+	'app.title': 'HiDataLinker',
 	'welcome.blurb':
 		'面向 MySQL 与 PostgreSQL 的 Navicat 风格管理工具。创建连接后可浏览表、视图、索引、触发器与函数，并查看数据或执行 SQL。',
 	'welcome.newConnection': '新建连接',

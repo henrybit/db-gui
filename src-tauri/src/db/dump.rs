@@ -81,7 +81,7 @@ pub async fn build_table_data_dump(
 
 fn dump_header(target: &str, include_schema: bool, include_data: bool) -> String {
     format!(
-        "-- DB GUI dump\n-- Target: {target}\n-- Mode: {}\n\n",
+        "-- HiDataLinker dump\n-- Target: {target}\n-- Mode: {}\n\n",
         dump_mode_label(include_schema, include_data)
     )
 }
