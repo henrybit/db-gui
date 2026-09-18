@@ -36,6 +36,9 @@
 			case 'dump-database':
 				if (connectionId && schema) workspace.askDumpDatabase(connectionId, schema);
 				break;
+			case 'migrate-database':
+				if (connectionId && schema) workspace.askMigrateDatabase(connectionId, schema);
+				break;
 			case 'run-sql-file':
 				if (connectionId && schema) void workspace.runSqlFile(connectionId, schema);
 				break;
@@ -62,11 +65,17 @@
 	}
 
 	function labelFor(action: ContextMenuAction): string {
-		if (action === 'create-database' || action === 'delete-database' || action === 'dump-database') {
+		if (
+			action === 'create-database' ||
+			action === 'delete-database' ||
+			action === 'dump-database' ||
+			action === 'migrate-database'
+		) {
 			const connection = workspace.connections.find((item) => item.id === menu?.connectionId);
 			const noun = schemaNounLabel(connection?.engine);
 			if (action === 'create-database') return t('menu.createDatabase', { noun });
 			if (action === 'delete-database') return t('menu.deleteDatabase', { noun });
+			if (action === 'migrate-database') return t('menu.migrateDatabase', { noun });
 			return t('menu.dumpDatabase', { noun });
 		}
 		if (action === 'refresh') {
@@ -92,6 +101,7 @@
 			'create-database': 'menu.createDatabase',
 			'delete-database': 'menu.deleteDatabase',
 			'dump-database': 'menu.dumpDatabase',
+			'migrate-database': 'menu.migrateDatabase',
 			'run-sql-file': 'menu.runSqlFile',
 			refresh: 'menu.refresh',
 			'open-data': 'menu.openTable',
