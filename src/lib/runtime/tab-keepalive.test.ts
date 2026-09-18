@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nextMountedTabIds, sameStringSet } from './tab-keepalive';
+import { nextMountedTabIds, sameStringSet, shouldRenderMountedTab } from './tab-keepalive';
 
 describe('nextMountedTabIds', () => {
 	it('mounts the active tab on first visit', () => {
@@ -20,6 +20,18 @@ describe('nextMountedTabIds', () => {
 	it('ignores an active id that is not open', () => {
 		const next = nextMountedTabIds(new Set(['a']), new Set(['a']), 'missing');
 		expect([...next]).toEqual(['a']);
+	});
+});
+
+describe('shouldRenderMountedTab', () => {
+	it('keeps ordinary visited tabs rendered while inactive', () => {
+		expect(shouldRenderMountedTab({ kind: 'table' }, false)).toBe(true);
+		expect(shouldRenderMountedTab({ kind: 'query' }, false)).toBe(true);
+	});
+
+	it('unmounts inactive query tabs whose SQL was spilled to disk', () => {
+		expect(shouldRenderMountedTab({ kind: 'query', sqlCached: true }, false)).toBe(false);
+		expect(shouldRenderMountedTab({ kind: 'query', sqlCached: true }, true)).toBe(true);
 	});
 });
 

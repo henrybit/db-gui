@@ -19,7 +19,8 @@
 		schema,
 		sql,
 		autoRun = false,
-		active = true
+		active = true,
+		sqlCached = false
 	}: {
 		tabId: string;
 		connectionId: string;
@@ -27,6 +28,7 @@
 		sql: string;
 		autoRun?: boolean;
 		active?: boolean;
+		sqlCached?: boolean;
 	} = $props();
 
 	let text = $state('');
@@ -157,7 +159,7 @@
 	}
 
 	$effect(() => {
-		if (!autoRun || didAutoRun || running || !active) return;
+		if (!hydrated || !autoRun || didAutoRun || running || loadingSql || !active) return;
 		didAutoRun = true;
 		workspace.clearTabAutoRun(tabId);
 		void run();
@@ -179,14 +181,18 @@
 	</div>
 	<StackSplit>
 		{#snippet top()}
-			<SqlEditor
-				bind:value={text}
-				engine={connection?.engine}
-				{active}
-				onRun={run}
-				onFormat={format}
-				onExplain={explain}
-			/>
+			{#if loadingSql}
+				<div class="empty">{t('query.loadingSql')}</div>
+			{:else}
+				<SqlEditor
+					bind:value={text}
+					engine={connection?.engine}
+					{active}
+					onRun={run}
+					onFormat={format}
+					onExplain={explain}
+				/>
+			{/if}
 		{/snippet}
 		{#snippet bottom()}
 			{#if error}

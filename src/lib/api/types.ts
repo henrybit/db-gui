@@ -184,7 +184,9 @@ export type ContextMenuAction =
 	| 'new-query'
 	| 'create-database'
 	| 'delete-database'
-	| 'dump-database'
+	| 'dump-database-data'
+	| 'dump-database-full'
+	| 'dump-table-data'
 	| 'migrate-database'
 	| 'run-sql-file'
 	| 'refresh'
@@ -200,13 +202,6 @@ export interface CreateDatabasePrompt {
 }
 
 export interface DropDatabasePrompt {
-	connectionId: string;
-	connectionName: string;
-	engine: string;
-	name: string;
-}
-
-export interface DumpDatabasePrompt {
 	connectionId: string;
 	connectionName: string;
 	engine: string;

@@ -19,7 +19,6 @@ import type {
 	CreateDatabasePrompt,
 	DatabaseInfo,
 	DropDatabasePrompt,
-	DumpDatabasePrompt,
 	MigrateDatabasePrompt,
 	FolderKind,
 	IndexInfo,
@@ -62,7 +61,6 @@ class WorkspaceStore {
 	confirmDelete = $state<{ id: string; name: string } | null>(null);
 	createDatabasePrompt = $state<CreateDatabasePrompt | null>(null);
 	dropDatabasePrompt = $state<DropDatabasePrompt | null>(null);
-	dumpDatabasePrompt = $state<DumpDatabasePrompt | null>(null);
 	migrateDatabasePrompt = $state<MigrateDatabasePrompt | null>(null);
 	contextMenu = $state<ContextMenuState | null>(null);
 	queryResults = $state<Record<string, QueryResult | null>>({});

@@ -156,7 +156,8 @@
 										'new-query',
 										'run-sql-file',
 										'create-database',
-										'dump-database',
+										'dump-database-data',
+										'dump-database-full',
 										'migrate-database',
 										'refresh'
 									]
@@ -164,7 +165,8 @@
 										'new-query',
 										'run-sql-file',
 										'create-database',
-										'dump-database',
+										'dump-database-data',
+										'dump-database-full',
 										'migrate-database',
 										'delete-database',
 										'refresh'
