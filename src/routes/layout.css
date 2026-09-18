@@ -246,6 +246,27 @@ button {
 	height: calc(100% - 32px);
 }
 
+.tab-panels {
+	position: relative;
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+	height: 100%;
+}
+
+.tab-panel {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+	height: 100%;
+}
+
+.tab-panel[hidden] {
+	display: none !important;
+}
+
 .tabbar + .main-body,
 .main-pane:has(.tabbar) .main-body {
 	height: calc(100% - 36px);

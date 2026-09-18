@@ -25,7 +25,7 @@
 		value = $bindable(''),
 		engine = null,
 		placeholderText = '',
-		visible = true,
+		active = true,
 		onRun,
 		onFormat,
 		onExplain
@@ -33,7 +33,7 @@
 		value?: string;
 		engine?: string | null;
 		placeholderText?: string;
-		visible?: boolean;
+		active?: boolean;
 		onRun?: () => void;
 		onFormat?: () => void;
 		onExplain?: () => void;
@@ -177,8 +177,11 @@
 
 	$effect(() => {
 		const editor = view;
-		if (!editor || !visible) return;
-		queueMicrotask(() => editor.requestMeasure());
+		if (!editor || !active) return;
+		const frame = requestAnimationFrame(() => {
+			editor.requestMeasure();
+		});
+		return () => cancelAnimationFrame(frame);
 	});
 </script>
 

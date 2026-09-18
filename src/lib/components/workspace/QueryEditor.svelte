@@ -19,8 +19,7 @@
 		schema,
 		sql,
 		autoRun = false,
-		active = true,
-		sqlCached = false
+		active = true
 	}: {
 		tabId: string;
 		connectionId: string;
@@ -28,7 +27,6 @@
 		sql: string;
 		autoRun?: boolean;
 		active?: boolean;
-		sqlCached?: boolean;
 	} = $props();
 
 	let text = $state('');
@@ -89,6 +87,13 @@
 
 	onDestroy(() => {
 		if (hydrated) workspace.flushTabSql(tabId, text);
+	});
+
+	$effect(() => {
+		void active;
+		if (active) return;
+		const current = untrack(() => text);
+		workspace.setTabSql(tabId, current);
 	});
 
 	function format() {
@@ -152,7 +157,7 @@
 	}
 
 	$effect(() => {
-		if (!hydrated || !autoRun || didAutoRun || running || loadingSql) return;
+		if (!autoRun || didAutoRun || running || !active) return;
 		didAutoRun = true;
 		workspace.clearTabAutoRun(tabId);
 		void run();
@@ -174,18 +179,14 @@
 	</div>
 	<StackSplit>
 		{#snippet top()}
-			{#if loadingSql}
-				<div class="empty">{t('query.loadingSql')}</div>
-			{:else}
-				<SqlEditor
-					bind:value={text}
-					engine={connection?.engine}
-					visible={active}
-					onRun={run}
-					onFormat={format}
-					onExplain={explain}
-				/>
-			{/if}
+			<SqlEditor
+				bind:value={text}
+				engine={connection?.engine}
+				{active}
+				onRun={run}
+				onFormat={format}
+				onExplain={explain}
+			/>
 		{/snippet}
 		{#snippet bottom()}
 			{#if error}
