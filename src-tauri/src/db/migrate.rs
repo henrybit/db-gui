@@ -163,7 +163,13 @@ pub async fn migrate_database(
         );
     }
 
-    execute_script(&target, &script, &progress).await?;
+    // Dump SQL may still contain the source name until a later rename.
+    let execute_schema = if rewrite_before_execute {
+        target_name
+    } else {
+        source_name
+    };
+    execute_script(&target, &script, execute_schema, &progress).await?;
 
     if restore_then_rename {
         progress.emit(
@@ -261,9 +267,45 @@ async fn ensure_name_absent_or_empty(
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DumpStatementKind {
+    /// CREATE DATABASE / CREATE SCHEMA — must run before a default schema exists.
+    Unscoped,
+    /// USE / SET search_path — session-only; a pooled execute would not stick.
+    Session,
+    /// Object DDL/DML — needs a default schema on the same connection.
+    InSchema,
+}
+
+fn dump_statement_kind(sql: &str) -> DumpStatementKind {
+    let tokens: Vec<String> = sql
+        .trim_start()
+        .split_whitespace()
+        .take(3)
+        .map(|token| {
+            token
+                .trim_matches(|c: char| matches!(c, '`' | '"' | '(' | ',' | ';'))
+                .to_ascii_uppercase()
+        })
+        .filter(|token| !token.is_empty())
+        .collect();
+
+    match tokens.as_slice() {
+        [use_kw, ..] if use_kw == "USE" => DumpStatementKind::Session,
+        [set_kw, path, ..] if set_kw == "SET" && path == "SEARCH_PATH" => {
+            DumpStatementKind::Session
+        }
+        [create, kind, ..] if create == "CREATE" && (kind == "DATABASE" || kind == "SCHEMA") => {
+            DumpStatementKind::Unscoped
+        }
+        _ => DumpStatementKind::InSchema,
+    }
+}
+
 async fn execute_script(
     target: &LiveEngine,
     script: &DumpScript,
+    schema: &str,
     progress: &ProgressEmitter,
 ) -> AppResult<()> {
     let total = script.statements.len() as u32;
@@ -294,8 +336,26 @@ async fn execute_script(
             continue;
         }
 
-        // Schema context is already embedded (USE / qualified names / CREATE SCHEMA).
-        match target.execute_sql(None, sql).await {
+        // Each execute_sql() borrows a pooled connection. A standalone USE
+        // therefore cannot carry over to CREATE TABLE on the next checkout.
+        let result = match dump_statement_kind(sql) {
+            DumpStatementKind::Session => {
+                progress.emit(
+                    "execute",
+                    "success",
+                    statement.object_kind,
+                    statement.object_name.as_deref(),
+                    current,
+                    total,
+                    format!("OK: {}", statement.label),
+                );
+                continue;
+            }
+            DumpStatementKind::Unscoped => target.execute_sql(None, sql).await,
+            DumpStatementKind::InSchema => target.execute_sql(Some(schema), sql).await,
+        };
+
+        match result {
             Ok(_) => {
                 progress.emit(
                     "execute",
@@ -390,8 +450,7 @@ async fn rename_mysql_database(
     let views = target.list_views(from).await?;
     let routines = target.list_routines(from).await?;
     let triggers = target.list_triggers(from).await?;
-    let total =
-        (tables.len() + views.len() + routines.len() + triggers.len()).max(1) as u32;
+    let total = (tables.len() + views.len() + routines.len() + triggers.len()).max(1) as u32;
     let mut current = 0_u32;
 
     for table in &tables {
@@ -531,4 +590,37 @@ fn find_ci(haystack: &str, needle: &str) -> Option<usize> {
     haystack
         .to_ascii_lowercase()
         .find(&needle.to_ascii_lowercase())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classifies_dump_statements_for_pooled_execute() {
+        assert_eq!(
+            dump_statement_kind("USE `shop`"),
+            DumpStatementKind::Session
+        );
+        assert_eq!(
+            dump_statement_kind("SET search_path TO \"shop\""),
+            DumpStatementKind::Session
+        );
+        assert_eq!(
+            dump_statement_kind("CREATE DATABASE IF NOT EXISTS `shop`"),
+            DumpStatementKind::Unscoped
+        );
+        assert_eq!(
+            dump_statement_kind("CREATE SCHEMA IF NOT EXISTS \"shop\""),
+            DumpStatementKind::Unscoped
+        );
+        assert_eq!(
+            dump_statement_kind("CREATE TABLE `_prisma_migrations` (`id` VARCHAR(191) NOT NULL)"),
+            DumpStatementKind::InSchema
+        );
+        assert_eq!(
+            dump_statement_kind("INSERT INTO `shop`.`orders` (`id`) VALUES (1)"),
+            DumpStatementKind::InSchema
+        );
+    }
 }

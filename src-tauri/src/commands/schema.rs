@@ -126,40 +126,6 @@ pub async fn migrate_database(
 }
 
 #[tauri::command]
-pub async fn migrate_database(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    source_connection_id: String,
-    source_name: String,
-    target_connection_id: String,
-    target_name: String,
-    include_data: bool,
-) -> AppResult<MigrateResult> {
-    if source_connection_id == target_connection_id && source_name.trim() == target_name.trim() {
-        return Err(AppError::msg(
-            "source and target must differ (pick another connection or target name)",
-        ));
-    }
-
-    let source = state.engine(&source_connection_id)?;
-    let target = state.engine(&target_connection_id)?;
-    let same_connection = source_connection_id == target_connection_id;
-    run_db(async move {
-        crate::db::migrate::migrate_database(
-            app,
-            source,
-            target,
-            &source_name,
-            &target_name,
-            include_data,
-            same_connection,
-        )
-        .await
-    })
-    .await
-}
-
-#[tauri::command]
 pub async fn list_charset_catalog(
     state: State<'_, AppState>,
     connection_id: String,

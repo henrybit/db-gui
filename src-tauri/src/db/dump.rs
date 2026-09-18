@@ -35,7 +35,8 @@ impl DumpScript {
     pub fn full_sql(&self) -> String {
         let mut out = String::from("-- DB GUI dump\n");
         for statement in &self.statements {
-            if let (Some(kind), Some(name)) = (statement.object_kind, statement.object_name.as_deref())
+            if let (Some(kind), Some(name)) =
+                (statement.object_kind, statement.object_name.as_deref())
             {
                 out.push_str(&format!("-- {kind}: {name}\n"));
             } else if !statement.label.is_empty() {
@@ -172,10 +173,7 @@ where
                 total_objects,
                 &format!("Dumping table DDL: {}", table.name),
             );
-            match engine
-                .get_ddl(schema, ObjectKind::Table, &table.name)
-                .await
-            {
+            match engine.get_ddl(schema, ObjectKind::Table, &table.name).await {
                 Ok(ddl) => {
                     script.statements.push(DumpStatement {
                         object_kind: Some("table"),
@@ -335,10 +333,7 @@ where
         None,
         total_objects,
         total_objects,
-        &format!(
-            "Dump ready: {} statement(s)",
-            script.statements.len()
-        ),
+        &format!("Dump ready: {} statement(s)", script.statements.len()),
     );
 
     Ok(script)
