@@ -18,13 +18,15 @@
 		connectionId,
 		schema,
 		sql,
-		autoRun = false
+		autoRun = false,
+		active = true
 	}: {
 		tabId: string;
 		connectionId: string;
 		schema?: string;
 		sql: string;
 		autoRun?: boolean;
+		active?: boolean;
 	} = $props();
 
 	let text = $state(untrack(() => sql));
@@ -49,6 +51,13 @@
 				: localLog
 	);
 	const canAct = $derived(!running && Boolean(text.trim()));
+
+	$effect(() => {
+		void active;
+		if (active) return;
+		const current = untrack(() => text);
+		workspace.setTabSql(tabId, current);
+	});
 
 	function format() {
 		try {
@@ -111,7 +120,7 @@
 	}
 
 	$effect(() => {
-		if (!autoRun || didAutoRun || running) return;
+		if (!autoRun || didAutoRun || running || !active) return;
 		didAutoRun = true;
 		workspace.clearTabAutoRun(tabId);
 		void run();
@@ -136,6 +145,7 @@
 			<SqlEditor
 				bind:value={text}
 				engine={connection?.engine}
+				{active}
 				onRun={run}
 				onFormat={format}
 				onExplain={explain}

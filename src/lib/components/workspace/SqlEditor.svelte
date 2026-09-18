@@ -25,6 +25,7 @@
 		value = $bindable(''),
 		engine = null,
 		placeholderText = '',
+		active = true,
 		onRun,
 		onFormat,
 		onExplain
@@ -32,6 +33,7 @@
 		value?: string;
 		engine?: string | null;
 		placeholderText?: string;
+		active?: boolean;
 		onRun?: () => void;
 		onFormat?: () => void;
 		onExplain?: () => void;
@@ -171,6 +173,15 @@
 		editor.dispatch({
 			changes: { from: 0, to: current.length, insert: next }
 		});
+	});
+
+	$effect(() => {
+		const editor = view;
+		if (!editor || !active) return;
+		const frame = requestAnimationFrame(() => {
+			editor.requestMeasure();
+		});
+		return () => cancelAnimationFrame(frame);
 	});
 </script>
 
