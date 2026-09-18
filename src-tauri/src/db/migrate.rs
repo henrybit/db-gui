@@ -99,6 +99,7 @@ pub async fn migrate_database(
         build_dump_script(
             &source,
             source_name,
+            true,
             include_data,
             dialect,
             Some(

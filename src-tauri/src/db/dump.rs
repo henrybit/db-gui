@@ -9,6 +9,15 @@ pub enum DumpDialect {
     Postgres,
 }
 
+pub fn dump_mode_label(include_schema: bool, include_data: bool) -> &'static str {
+    match (include_schema, include_data) {
+        (true, true) => "schema + data",
+        (true, false) => "schema only",
+        (false, true) => "data only",
+        (false, false) => "empty",
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct DumpStatement {
     pub object_kind: Option<&'static str>,
@@ -56,16 +65,54 @@ pub async fn build_dump(
                 _current: u32,
                 _total: u32,
                 _message: &str| {};
-    Ok(
-        build_dump_script(engine, schema, include_data, dialect, Some(noop))
-            .await?
-            .full_sql(),
+    Ok(build_dump_script(
+        engine,
+        schema,
+        include_schema,
+        include_data,
+        dialect,
+        Some(noop),
     )
+    .await?
+    .full_sql())
+}
+
+pub async fn build_table_data_dump(
+    engine: &impl DatabaseEngine,
+    schema: &str,
+    table: &str,
+    dialect: DumpDialect,
+) -> AppResult<String> {
+    validate_ident(schema)?;
+    validate_ident(table)?;
+
+    let mut script = DumpScript::default();
+    push_database_preamble(&mut script, schema, false, dialect);
+    let noop = |_phase: &str,
+                _object_kind: Option<&str>,
+                _object_name: Option<&str>,
+                _current: u32,
+                _total: u32,
+                _message: &str| {};
+    let mut on_progress = Some(noop);
+    append_table_data_statements(
+        &mut script,
+        engine,
+        schema,
+        table,
+        dialect,
+        &mut on_progress,
+        1,
+        1,
+    )
+    .await?;
+    Ok(script.full_sql())
 }
 
 pub async fn build_dump_script<F>(
     engine: &impl DatabaseEngine,
     schema: &str,
+    include_schema: bool,
     include_data: bool,
     dialect: DumpDialect,
     mut on_progress: Option<F>,
@@ -79,11 +126,7 @@ where
     }
 
     let mut script = DumpScript::default();
-    let mode = if include_data {
-        "schema + data"
-    } else {
-        "schema only"
-    };
+    let mode = dump_mode_label(include_schema, include_data);
 
     notify(
         &mut on_progress,
@@ -95,72 +138,63 @@ where
         &format!("Building dump for {schema} ({mode})"),
     );
 
-    match dialect {
-        DumpDialect::Mysql => {
-            script.statements.push(DumpStatement {
-                object_kind: Some("database"),
-                object_name: Some(schema.to_string()),
-                label: format!("Create database {schema}"),
-                sql: format!("CREATE DATABASE IF NOT EXISTS {}", quote_ident(schema)),
-            });
-            script.statements.push(DumpStatement {
-                object_kind: Some("database"),
-                object_name: Some(schema.to_string()),
-                label: format!("Use database {schema}"),
-                sql: format!("USE {}", quote_ident(schema)),
-            });
-        }
-        DumpDialect::Postgres => {
-            script.statements.push(DumpStatement {
-                object_kind: Some("schema"),
-                object_name: Some(schema.to_string()),
-                label: format!("Create schema {schema}"),
-                sql: format!("CREATE SCHEMA IF NOT EXISTS {}", quote_ident_pg(schema)),
-            });
-        }
-    }
+    push_database_preamble(&mut script, schema, include_schema, dialect);
 
     let tables = engine.list_tables(schema).await?;
-    let views = engine.list_views(schema).await?;
-    let routines = engine.list_routines(schema).await?;
-    let triggers = engine.list_triggers(schema).await?;
+    let views = if include_schema {
+        engine.list_views(schema).await?
+    } else {
+        Vec::new()
+    };
+    let routines = if include_schema {
+        engine.list_routines(schema).await?
+    } else {
+        Vec::new()
+    };
+    let triggers = if include_schema {
+        engine.list_triggers(schema).await?
+    } else {
+        Vec::new()
+    };
     let total_objects =
         (tables.len() + views.len() + routines.len() + triggers.len()).max(1) as u32;
     let mut index = 0_u32;
 
     for table in &tables {
         index += 1;
-        notify(
-            &mut on_progress,
-            "dump",
-            Some("table"),
-            Some(&table.name),
-            index,
-            total_objects,
-            &format!("Dumping table DDL: {}", table.name),
-        );
-        match engine
-            .get_ddl(schema, ObjectKind::Table, &table.name)
-            .await
-        {
-            Ok(ddl) => {
-                script.statements.push(DumpStatement {
-                    object_kind: Some("table"),
-                    object_name: Some(table.name.clone()),
-                    label: format!("Create table {}", table.name),
-                    sql: ddl.trim_end().trim_end_matches(';').to_string(),
-                });
-            }
-            Err(error) => {
-                notify(
-                    &mut on_progress,
-                    "dump",
-                    Some("table"),
-                    Some(&table.name),
-                    index,
-                    total_objects,
-                    &format!("Skipped table DDL {}: {error}", table.name),
-                );
+        if include_schema {
+            notify(
+                &mut on_progress,
+                "dump",
+                Some("table"),
+                Some(&table.name),
+                index,
+                total_objects,
+                &format!("Dumping table DDL: {}", table.name),
+            );
+            match engine
+                .get_ddl(schema, ObjectKind::Table, &table.name)
+                .await
+            {
+                Ok(ddl) => {
+                    script.statements.push(DumpStatement {
+                        object_kind: Some("table"),
+                        object_name: Some(table.name.clone()),
+                        label: format!("Create table {}", table.name),
+                        sql: ddl.trim_end().trim_end_matches(';').to_string(),
+                    });
+                }
+                Err(error) => {
+                    notify(
+                        &mut on_progress,
+                        "dump",
+                        Some("table"),
+                        Some(&table.name),
+                        index,
+                        total_objects,
+                        &format!("Skipped table DDL {}: {error}", table.name),
+                    );
+                }
             }
         }
 
@@ -308,6 +342,49 @@ where
     );
 
     Ok(script)
+}
+
+fn push_database_preamble(
+    script: &mut DumpScript,
+    schema: &str,
+    include_schema: bool,
+    dialect: DumpDialect,
+) {
+    match dialect {
+        DumpDialect::Mysql => {
+            if include_schema {
+                script.statements.push(DumpStatement {
+                    object_kind: Some("database"),
+                    object_name: Some(schema.to_string()),
+                    label: format!("Create database {schema}"),
+                    sql: format!("CREATE DATABASE IF NOT EXISTS {}", quote_ident(schema)),
+                });
+            }
+            script.statements.push(DumpStatement {
+                object_kind: Some("database"),
+                object_name: Some(schema.to_string()),
+                label: format!("Use database {schema}"),
+                sql: format!("USE {}", quote_ident(schema)),
+            });
+        }
+        DumpDialect::Postgres => {
+            if include_schema {
+                script.statements.push(DumpStatement {
+                    object_kind: Some("schema"),
+                    object_name: Some(schema.to_string()),
+                    label: format!("Create schema {schema}"),
+                    sql: format!("CREATE SCHEMA IF NOT EXISTS {}", quote_ident_pg(schema)),
+                });
+            } else {
+                script.statements.push(DumpStatement {
+                    object_kind: Some("schema"),
+                    object_name: Some(schema.to_string()),
+                    label: format!("Set search_path {schema}"),
+                    sql: format!("SET search_path TO {}", quote_ident_pg(schema)),
+                });
+            }
+        }
+    }
 }
 
 async fn append_table_data_statements<F>(
@@ -490,6 +567,13 @@ pub fn rewrite_dump_schema_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn labels_dump_modes() {
+        assert_eq!(dump_mode_label(true, true), "schema + data");
+        assert_eq!(dump_mode_label(true, false), "schema only");
+        assert_eq!(dump_mode_label(false, true), "data only");
+    }
 
     #[test]
     fn rewrites_quoted_schema_names() {

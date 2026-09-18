@@ -6,10 +6,11 @@ mod runtime;
 mod state;
 
 use commands::{
-    connect_session, create_database, delete_connection, disconnect_session, drop_database,
-    dump_database, execute_sql, get_columns, get_ddl, list_charset_catalog, list_connections,
-    list_databases, list_indexes, list_routines, list_tables, list_triggers, list_views,
-    migrate_database, preview_table, table_row_count, test_connection, upsert_connection,
+    connect_session, create_database, delete_connection, delete_query_cache, disconnect_session,
+    drop_database, dump_database, dump_table, execute_sql, get_columns, get_ddl,
+    list_charset_catalog, list_connections, list_databases, list_indexes, list_routines,
+    list_tables, list_triggers, list_views, migrate_database, preview_table, read_query_cache,
+    table_row_count, test_connection, upsert_connection, write_query_cache, write_text_file,
 };
 use state::AppState;
 use tauri::Manager;
@@ -42,6 +43,11 @@ pub fn run() {
             create_database,
             drop_database,
             dump_database,
+            dump_table,
+            write_text_file,
+            write_query_cache,
+            read_query_cache,
+            delete_query_cache,
             migrate_database,
             list_charset_catalog,
             list_tables,

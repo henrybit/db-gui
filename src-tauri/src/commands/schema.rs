@@ -65,6 +65,33 @@ pub async fn dump_database(
 }
 
 #[tauri::command]
+pub async fn dump_table(
+    state: State<'_, AppState>,
+    connection_id: String,
+    schema: String,
+    table: String,
+) -> AppResult<String> {
+    with_engine(&state, connection_id, move |engine| async move {
+        engine.dump_table(&schema, &table).await
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn write_text_file(path: String, contents: String) -> AppResult<String> {
+    let path = path.trim().to_string();
+    if path.is_empty() {
+        return Err(AppError::msg("save path is empty"));
+    }
+    tokio::task::spawn_blocking(move || -> AppResult<String> {
+        std::fs::write(&path, contents)?;
+        Ok(path)
+    })
+    .await
+    .map_err(|error| AppError::msg(format!("failed to save file: {error}")))?
+}
+
+#[tauri::command]
 pub async fn migrate_database(
     app: AppHandle,
     state: State<'_, AppState>,
