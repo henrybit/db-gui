@@ -181,6 +181,7 @@ export type ContextMenuAction =
 	| 'create-database'
 	| 'delete-database'
 	| 'dump-database'
+	| 'migrate-database'
 	| 'run-sql-file'
 	| 'refresh'
 	| 'open-data'
@@ -206,6 +207,32 @@ export interface DumpDatabasePrompt {
 	connectionName: string;
 	engine: string;
 	name: string;
+}
+
+export interface MigrateDatabasePrompt {
+	connectionId: string;
+	connectionName: string;
+	engine: string;
+	name: string;
+}
+
+export type MigrateProgressLevel = 'info' | 'success' | 'warning' | 'error';
+
+export interface MigrateProgressEvent {
+	phase: string;
+	level: MigrateProgressLevel | string;
+	objectKind?: string | null;
+	objectName?: string | null;
+	current: number;
+	total: number;
+	message: string;
+}
+
+export interface MigrateResult {
+	sourceName: string;
+	targetName: string;
+	statementCount: number;
+	renamed: boolean;
 }
 
 export interface ContextMenuState {

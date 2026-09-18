@@ -135,12 +135,20 @@
 							connectionId: connection.id,
 							schema: database.name,
 							actions: database.isSystem
-								? ['new-query', 'run-sql-file', 'create-database', 'dump-database', 'refresh']
+								? [
+										'new-query',
+										'run-sql-file',
+										'create-database',
+										'dump-database',
+										'migrate-database',
+										'refresh'
+									]
 								: [
 										'new-query',
 										'run-sql-file',
 										'create-database',
 										'dump-database',
+										'migrate-database',
 										'delete-database',
 										'refresh'
 									]

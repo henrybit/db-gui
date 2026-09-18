@@ -12,6 +12,7 @@
 	import CreateDatabaseDialog from '$lib/components/dialogs/CreateDatabaseDialog.svelte';
 	import DropDatabaseDialog from '$lib/components/dialogs/DropDatabaseDialog.svelte';
 	import DumpDatabaseDialog from '$lib/components/dialogs/DumpDatabaseDialog.svelte';
+	import MigrateDatabaseDialog from '$lib/components/dialogs/MigrateDatabaseDialog.svelte';
 	import ContextMenu from '$lib/components/layout/ContextMenu.svelte';
 
 	let { children } = $props();
@@ -77,6 +78,9 @@
 {/if}
 {#if workspace.dumpDatabasePrompt}
 	<DumpDatabaseDialog />
+{/if}
+{#if workspace.migrateDatabasePrompt}
+	<MigrateDatabaseDialog />
 {/if}
 {#if workspace.contextMenu}
 	<ContextMenu />
