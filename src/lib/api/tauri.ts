@@ -97,6 +97,21 @@ export const api = {
 			includeData
 		}),
 
+	migrateDatabase: (
+		sourceConnectionId: string,
+		sourceName: string,
+		targetConnectionId: string,
+		targetName: string,
+		includeData = true
+	) =>
+		call<MigrateResult>('migrate_database', {
+			sourceConnectionId,
+			sourceName,
+			targetConnectionId,
+			targetName,
+			includeData
+		}),
+
 	listCharsetCatalog: (connectionId: string) =>
 		call<CharsetCatalog>('list_charset_catalog', { connectionId }),
 
