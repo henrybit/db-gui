@@ -19,6 +19,8 @@ import type {
 	CreateDatabasePrompt,
 	DatabaseInfo,
 	DropDatabasePrompt,
+	DumpDatabasePrompt,
+	MigrateDatabasePrompt,
 	FolderKind,
 	IndexInfo,
 	ObjectKind,
@@ -60,6 +62,8 @@ class WorkspaceStore {
 	confirmDelete = $state<{ id: string; name: string } | null>(null);
 	createDatabasePrompt = $state<CreateDatabasePrompt | null>(null);
 	dropDatabasePrompt = $state<DropDatabasePrompt | null>(null);
+	dumpDatabasePrompt = $state<DumpDatabasePrompt | null>(null);
+	migrateDatabasePrompt = $state<MigrateDatabasePrompt | null>(null);
 	contextMenu = $state<ContextMenuState | null>(null);
 	queryResults = $state<Record<string, QueryResult | null>>({});
 	lastMessage = $state<string | null>(null);
@@ -326,6 +330,52 @@ class WorkspaceStore {
 			const sql = await api.dumpTable(connectionId, schema, table);
 			const saved = await writeSqlFile(path, sql, fileName);
 			this.status = t('status.exportedTo', { name: table, path: saved });
+		} catch (error) {
+			this.error = errorMessage(error);
+		} finally {
+			this.end(key);
+		}
+	}
+
+	askMigrateDatabase(connectionId: string, schema: string) {
+		const item = this.connections.find((c) => c.id === connectionId);
+		if (!item?.connected || !schema) return;
+		this.error = null;
+		this.migrateDatabasePrompt = {
+			connectionId: item.id,
+			connectionName: item.name,
+			engine: item.engine,
+			name: schema
+		};
+		this.closeMenu();
+	}
+
+	async confirmMigrateDatabase(
+		targetConnectionId: string,
+		targetName: string,
+		includeData: boolean
+	) {
+		if (!this.migrateDatabasePrompt) return;
+		const prompt = this.migrateDatabasePrompt;
+		const key = `migrate-db:${prompt.connectionId}:${prompt.name}`;
+		this.begin(key);
+		this.error = null;
+		try {
+			const result = await api.migrateDatabase(
+				prompt.connectionId,
+				prompt.name,
+				targetConnectionId,
+				targetName,
+				includeData
+			);
+			await this.loadDatabases(targetConnectionId);
+			this.expanded = new Set([...this.expanded, `conn:${targetConnectionId}`]);
+			this.status = t('status.migrated', {
+				noun: schemaNounLabel(prompt.engine),
+				source: result.sourceName,
+				target: result.targetName,
+				count: result.statementCount
+			});
 		} catch (error) {
 			this.error = errorMessage(error);
 		} finally {

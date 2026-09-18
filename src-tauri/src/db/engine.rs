@@ -59,6 +59,13 @@ impl LiveEngine {
         }
     }
 
+    pub fn kind(&self) -> EngineKind {
+        match self {
+            Self::MySql(_) => EngineKind::MySql,
+            Self::Postgres(_) => EngineKind::Postgres,
+        }
+    }
+
     pub async fn test(request: &TestConnectionRequest) -> AppResult<()> {
         match request.engine_kind()? {
             EngineKind::MySql => MySqlEngine::test(request).await,

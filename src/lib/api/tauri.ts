@@ -7,6 +7,7 @@ import type {
 	ConnectionProfile,
 	DatabaseInfo,
 	IndexInfo,
+	MigrateResult,
 	ObjectKind,
 	QueryResult,
 	RoutineInfo,
@@ -80,6 +81,21 @@ export const api = {
 	readQueryCache: (tabId: string) => call<string>('read_query_cache', { tabId }),
 
 	deleteQueryCache: (tabId: string) => call<void>('delete_query_cache', { tabId }),
+
+	migrateDatabase: (
+		sourceConnectionId: string,
+		sourceName: string,
+		targetConnectionId: string,
+		targetName: string,
+		includeData = true
+	) =>
+		call<MigrateResult>('migrate_database', {
+			sourceConnectionId,
+			sourceName,
+			targetConnectionId,
+			targetName,
+			includeData
+		}),
 
 	listCharsetCatalog: (connectionId: string) =>
 		call<CharsetCatalog>('list_charset_catalog', { connectionId }),

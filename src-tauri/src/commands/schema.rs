@@ -2,11 +2,12 @@ use super::with_engine;
 use crate::db::DatabaseEngine;
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    CharsetCatalog, ColumnInfo, DatabaseInfo, IndexInfo, ObjectKind, RoutineInfo, TableInfo,
-    TriggerInfo, ViewInfo,
+    CharsetCatalog, ColumnInfo, DatabaseInfo, IndexInfo, MigrateResult, ObjectKind, RoutineInfo,
+    TableInfo, TriggerInfo, ViewInfo,
 };
+use crate::runtime::run_db;
 use crate::state::AppState;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub async fn list_databases(
@@ -64,30 +65,37 @@ pub async fn dump_database(
 }
 
 #[tauri::command]
-pub async fn dump_table(
+pub async fn migrate_database(
+    app: AppHandle,
     state: State<'_, AppState>,
-    connection_id: String,
-    schema: String,
-    table: String,
-) -> AppResult<String> {
-    with_engine(&state, connection_id, move |engine| async move {
-        engine.dump_table(&schema, &table).await
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn write_text_file(path: String, contents: String) -> AppResult<String> {
-    let path = path.trim().to_string();
-    if path.is_empty() {
-        return Err(AppError::msg("save path is empty"));
+    source_connection_id: String,
+    source_name: String,
+    target_connection_id: String,
+    target_name: String,
+    include_data: bool,
+) -> AppResult<MigrateResult> {
+    if source_connection_id == target_connection_id && source_name.trim() == target_name.trim() {
+        return Err(AppError::msg(
+            "source and target must differ (pick another connection or target name)",
+        ));
     }
-    tokio::task::spawn_blocking(move || -> AppResult<String> {
-        std::fs::write(&path, contents)?;
-        Ok(path)
+
+    let source = state.engine(&source_connection_id)?;
+    let target = state.engine(&target_connection_id)?;
+    let same_connection = source_connection_id == target_connection_id;
+    run_db(async move {
+        crate::db::migrate::migrate_database(
+            app,
+            source,
+            target,
+            &source_name,
+            &target_name,
+            include_data,
+            same_connection,
+        )
+        .await
     })
     .await
-    .map_err(|error| AppError::msg(format!("failed to save file: {error}")))?
 }
 
 #[tauri::command]

@@ -981,6 +981,65 @@ button {
 	overflow: auto;
 }
 
+.migrate-log {
+	margin-top: 10px;
+	max-height: min(36vh, 280px);
+	overflow: auto;
+	padding: 8px 10px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: #0f172a;
+	color: #e2e8f0;
+	font-family: var(--mono);
+	font-size: 12px;
+	line-height: 1.45;
+	user-select: text;
+}
+
+.migrate-log-line {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 8px;
+	padding: 2px 0;
+}
+
+.migrate-log-line .phase {
+	color: #93c5fd;
+	flex: none;
+}
+
+.migrate-log-line .object {
+	color: #fcd34d;
+	flex: none;
+}
+
+.migrate-log-line .count {
+	color: #94a3b8;
+	flex: none;
+}
+
+.migrate-log-line .msg {
+	flex: 1 1 180px;
+	min-width: 0;
+	word-break: break-word;
+}
+
+.migrate-log-line.success .msg {
+	color: #86efac;
+}
+
+.migrate-log-line.warning .msg {
+	color: #fbbf24;
+}
+
+.migrate-log-line.error .msg {
+	color: #fca5a5;
+}
+
+.migrate-log-line.info .msg {
+	color: #e2e8f0;
+}
+
 .field .required {
 	color: var(--danger);
 	margin-left: 2px;

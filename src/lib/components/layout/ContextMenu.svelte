@@ -44,6 +44,9 @@
 					void workspace.exportTableData(connectionId, schema, objectName);
 				}
 				break;
+			case 'migrate-database':
+				if (connectionId && schema) workspace.askMigrateDatabase(connectionId, schema);
+				break;
 			case 'run-sql-file':
 				if (connectionId && schema) void workspace.runSqlFile(connectionId, schema);
 				break;
@@ -73,15 +76,15 @@
 		if (
 			action === 'create-database' ||
 			action === 'delete-database' ||
-			action === 'dump-database-data' ||
-			action === 'dump-database-full'
+			action === 'dump-database' ||
+			action === 'migrate-database'
 		) {
 			const connection = workspace.connections.find((item) => item.id === menu?.connectionId);
 			const noun = schemaNounLabel(connection?.engine);
 			if (action === 'create-database') return t('menu.createDatabase', { noun });
 			if (action === 'delete-database') return t('menu.deleteDatabase', { noun });
-			if (action === 'dump-database-data') return t('menu.dumpDatabaseData', { noun });
-			return t('menu.dumpDatabaseFull', { noun });
+			if (action === 'migrate-database') return t('menu.migrateDatabase', { noun });
+			return t('menu.dumpDatabase', { noun });
 		}
 		if (action === 'refresh') {
 			if (menu?.objectName) {
@@ -105,9 +108,8 @@
 			'new-query': 'menu.newQuery',
 			'create-database': 'menu.createDatabase',
 			'delete-database': 'menu.deleteDatabase',
-			'dump-database-data': 'menu.dumpDatabaseData',
-			'dump-database-full': 'menu.dumpDatabaseFull',
-			'dump-table-data': 'menu.dumpTableData',
+			'dump-database': 'menu.dumpDatabase',
+			'migrate-database': 'menu.migrateDatabase',
 			'run-sql-file': 'menu.runSqlFile',
 			refresh: 'menu.refresh',
 			'open-data': 'menu.openTable',
